@@ -102,9 +102,19 @@ def _status(term: str, text: str, stemmed_text: str) -> Status:
     return "missing"
 
 
+def _stemmed(lower_text: str) -> str:
+    return " " + " ".join(_stem_tokens(lower_text)) + " "
+
+
+def match_status(term: str, text: str) -> Status:
+    """Status of one term in plain (non-LaTeX) text, under the same rules as score()."""
+    lower = text.lower()
+    return _status(term, lower, _stemmed(lower))
+
+
 def score(requirements: list[Requirement], resume_text: str) -> ScoreResult:
     text = strip_latex(resume_text).lower()
-    stemmed_text = " " + " ".join(_stem_tokens(text)) + " "
+    stemmed_text = _stemmed(text)
     matches = [RequirementMatch(term=r.term, status=_status(r.term, text, stemmed_text)) for r in requirements]
 
     total = sum(r.weight for r in requirements)

@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.ai.provider import LLM, AIError
 from app.db import get_session
-from app.models import Posting
+from app.models import Application, Posting
 from app.postings.extract import extract_requirements
 from app.postings.fetch import FetchError, fetch_url, html_to_text
 from app.routes.ai import llm_dep
@@ -115,6 +115,8 @@ def delete_posting(posting_id: int, session: Session = Depends(get_session)):
     posting = session.get(Posting, posting_id)
     if posting is None:
         raise HTTPException(404, "Posting not found")
+    if session.exec(select(Application.id).where(Application.posting_id == posting_id)).first():
+        raise HTTPException(409, "This posting has an application with a resume, so it cannot be deleted.")
     session.delete(posting)
     session.commit()
     return Response(status_code=204)

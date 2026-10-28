@@ -129,3 +129,14 @@ def test_latex_commands_stripped():
 def test_strip_latex_directly():
     assert "section" not in strip_latex(r"\section*{Skills} % hidden").lower().replace("skills", "")
     assert strip_latex(r"A \\ B") .split() == ["A", "B"]
+
+
+def test_match_status_uses_score_rules_on_plain_text():
+    from app.scoring import match_status
+
+    assert match_status("Python", "Wrote PYTHON daily") == "matched"
+    assert match_status("Kubernetes", "ran k8s clusters") == "partial"
+    assert match_status("deployment", "deployed services") == "partial"
+    assert match_status("Java", "JavaScript only") == "missing"
+    for term, text in [("C++", "C++ and C"), ("Rust", "Rust"), ("ML", "machine learning")]:
+        assert match_status(term, text) == score([req(term)], text).matches[0].status

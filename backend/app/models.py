@@ -1,8 +1,9 @@
+from datetime import datetime, timezone
 from typing import Literal
 
 from pydantic import Field as PydanticField
 from pydantic import field_validator
-from sqlalchemy import JSON, Column, String
+from sqlalchemy import JSON, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 CardKind = Literal[
@@ -123,3 +124,36 @@ class Posting(PostingBase, table=True):
     )
     # List of Requirement dicts.
     requirements: list[dict] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+
+
+ApplicationStatus = Literal["not_applied", "applied", "interview", "offer", "rejected"]
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Application(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    posting_id: int = Field(foreign_key="posting.id", index=True)
+    status: ApplicationStatus = Field(
+        default="not_applied", sa_column=Column(String, nullable=False, index=True)
+    )
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class ResumeVersion(SQLModel, table=True):
+    """A snapshot of one resume. `bullets` are Bullet dicts in render order (bullet i is the
+    i-th \\resumeItem line of the generated tex). `record_hash` is the Record's hash when the
+    resume was generated; `suggestions` are Suggestion dicts proposed at generation time."""
+
+    __table_args__ = (UniqueConstraint("application_id", "version"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    application_id: int = Field(foreign_key="application.id", ondelete="CASCADE", index=True)
+    version: int
+    tex: str
+    bullets: list[dict] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    suggestions: list[dict] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    record_hash: str
+    created_at: datetime = Field(default_factory=_utcnow)
