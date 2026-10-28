@@ -106,3 +106,39 @@ def test_unknown_job_is_404(client, use_llm):
     use_llm(FakeLLM(GOOD))
     r = client.post("/api/ai/propose", json={"job_id": 999, "message": "hi", "history": []})
     assert r.status_code == 404
+
+
+def test_model_extra_is_sanitized_to_known_string_fields_per_kind():
+    reply = {
+        "reply": "ok",
+        "proposals": [
+            {"kind": "education", "title": "MIT", "description": "BS CS", "tags": [],
+             "extra": {"location": "  Cambridge, MA ", "start_date": "2016", "end_date": 2020,
+                       "category": "should not be here", "gpa": "4.0", "date": "x" * 10_000,
+                       "evil": {"nested": True}}},
+            {"kind": "skill", "title": "Go", "description": "", "tags": [],
+             "extra": {"category": "L" * 5000, "start_date": "2020"}},
+            {"kind": "accomplishment", "title": "Shipped", "description": "d", "tags": [],
+             "extra": {"location": "NYC", "notes": "secret"}},
+            {"kind": "certificate", "title": "AWS SA", "description": "", "tags": [],
+             "extra": "not a dict"},
+        ],
+        "followups": [],
+    }
+    r = propose_cards(FakeLLM(reply), "hi", None, [])
+    edu, skill, acc, cert = r.proposals
+    assert edu.extra == {"location": "Cambridge, MA", "start_date": "2016"}
+    assert set(skill.extra) == {"category"} and len(skill.extra["category"]) <= 100
+    assert acc.extra == {}
+    assert cert.extra == {}
+
+
+def test_propose_route_never_returns_unknown_extra(client, use_llm):
+    reply = {"reply": "ok", "followups": [], "proposals": [
+        {"kind": "project", "title": "P", "description": "d", "tags": [],
+         "extra": {"start_date": "2021", "injected": "x" * 100_000}}]}
+    use_llm(FakeLLM(reply))
+    r = client.post("/api/ai/propose", json={"message": "hi", "history": []})
+    assert r.status_code == 200
+    assert r.json()["proposals"][0]["extra"] == {"start_date": "2021"}
+    assert len(r.text) < 2000

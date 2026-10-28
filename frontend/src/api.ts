@@ -24,6 +24,8 @@ export interface CardDraft {
   title: string
   description: string
   tags: string[]
+  /** More detail than ever appears on the resume. */
+  details?: string
   extra?: Record<string, unknown>
 }
 export interface Card extends CardDraft {

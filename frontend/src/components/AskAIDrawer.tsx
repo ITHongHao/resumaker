@@ -1,13 +1,30 @@
 import { useState } from 'react'
 
 import { api, type Card, type CardDraft, type ChatTurn } from '@/api'
-import CardForm from '@/components/CardForm'
+import CardForm, { KIND_LABELS } from '@/components/CardForm'
 import { TagChips } from '@/components/CardItem'
 import { Button } from '@/components/ui/button'
+import { EXTRA_FIELDS, knownExtra } from '@/lib/cardFields'
 
 type Msg = { role: 'user' | 'assistant'; text: string; proposals?: CardDraft[]; followups?: string[] }
 
 const JOB_KINDS = ['project', 'accomplishment'] as const
+
+function ExtraList({ kind, extra }: { kind: CardDraft['kind']; extra: CardDraft['extra'] }) {
+  const shown = knownExtra(kind, extra)
+  const fields = (EXTRA_FIELDS[kind] ?? []).filter((f) => shown[f.key])
+  if (!fields.length) return null
+  return (
+    <dl className="my-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+      {fields.map((f) => (
+        <div key={f.key} className="flex gap-1">
+          <dt>{f.label}</dt>
+          <dd className="text-foreground">{shown[f.key]}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
 export default function AskAIDrawer({
   jobId,
@@ -57,7 +74,16 @@ export default function AskAIDrawer({
   async function accept(mi: number, pi: number, d: CardDraft) {
     setError(null)
     try {
-      const card = await api.createCard({ ...d, job_id: jobId, tags: d.tags ?? [] })
+      // Exactly the fields the proposal box (or the edit form) shows; nothing else the model sent.
+      const card = await api.createCard({
+        job_id: jobId,
+        kind: d.kind,
+        title: d.title,
+        description: d.description ?? '',
+        details: d.details ?? '',
+        tags: d.tags ?? [],
+        extra: knownExtra(d.kind, d.extra),
+      })
       setMsgs((ms) =>
         ms.map((m, i) => (i === mi ? { ...m, proposals: m.proposals?.filter((_, j) => j !== pi) } : m)),
       )
@@ -110,11 +136,19 @@ export default function AskAIDrawer({
                           error={error}
                         />
                       ) : (
-                        <div key={pi} className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm dark:border-blue-900 dark:bg-blue-950/30">
-                          <div className="mb-1 font-semibold text-primary">Suggested addition</div>
+                        <div
+                          key={pi}
+                          data-proposal
+                          className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm dark:border-blue-900 dark:bg-blue-950/30"
+                        >
+                          <div className="mb-1 font-semibold text-primary">
+                            Suggested addition · {KIND_LABELS[p.kind] ?? p.kind}
+                          </div>
                           <div className="font-medium">{p.title}</div>
                           {p.description && <p className="my-1 text-muted-foreground">{p.description}</p>}
-                          <TagChips tags={p.tags} />
+                          {p.details && <p className="my-1 text-muted-foreground">{p.details}</p>}
+                          <ExtraList kind={p.kind} extra={p.extra} />
+                          <TagChips tags={p.tags ?? []} />
                           <div className="mt-2 flex gap-2">
                             <Button size="sm" className="rounded-full" onClick={() => accept(mi, pi, p)}>
                               Add

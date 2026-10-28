@@ -99,4 +99,51 @@ describe('AskAIDrawer', () => {
     const created = server.calls.find((c) => c.method === 'POST' && c.path === '/api/cards')
     expect(created?.body.job_id).toBeNull()
   })
+
+  it('shows every field it will save, and Add sends exactly those fields', async () => {
+    const server = installFakeApi()
+    server.override = ({ method, path }) =>
+      method === 'POST' && path === '/api/ai/propose'
+        ? {
+            body: {
+              reply: 'ok',
+              followups: [],
+              proposals: [
+                {
+                  kind: 'project',
+                  title: 'Ledger app',
+                  description: 'Built a ledger.',
+                  tags: ['Rust'],
+                  // `bogus` is not a project field: it must be neither shown nor saved.
+                  extra: { start_date: '2021', end_date: '2022', bogus: 'HIDDEN-VALUE' },
+                },
+              ],
+            },
+          }
+        : undefined
+    const user = userEvent.setup()
+    render(<AskAIDrawer jobId={1} />)
+    await user.click(screen.getByRole('button', { name: /ask ai/i }))
+    await user.type(screen.getByPlaceholderText(/describe what you did/i), 'I built a ledger app')
+    await user.click(screen.getByRole('button', { name: /send/i }))
+    const box = (await screen.findByText('Ledger app')).closest('[data-proposal]') as HTMLElement
+    expect(box).toHaveTextContent('Project')
+    expect(box).toHaveTextContent('Built a ledger.')
+    expect(box).toHaveTextContent('Rust')
+    expect(box).toHaveTextContent(/start date\s*2021/i)
+    expect(box).toHaveTextContent(/end date\s*2022/i)
+    expect(screen.queryByText(/HIDDEN-VALUE/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+    const post = server.calls.find((c) => c.method === 'POST' && c.path === '/api/cards')!
+    expect(post.body).toEqual({
+      job_id: 1,
+      kind: 'project',
+      title: 'Ledger app',
+      description: 'Built a ledger.',
+      details: '',
+      tags: ['Rust'],
+      extra: { start_date: '2021', end_date: '2022' },
+    })
+  })
 })

@@ -1,10 +1,10 @@
 import json
 from typing import get_args
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, ValidationInfo, field_validator
 
 from app.ai.provider import LLM, AIError
-from app.models import CardKind, Job
+from app.models import CardKind, Job, known_extra
 
 SYSTEM_PROMPT = """You help a job seeker turn what they tell you into resume Record cards.
 You only PROPOSE cards; the user decides what to keep.
@@ -49,7 +49,14 @@ class CardDraft(BaseModel):
     title: str
     description: str = ""
     tags: list[str] = []
-    extra: dict = {}
+    # Never free-form from the model: only the known keys for this kind survive (see known_extra),
+    # so the drawer can show every field that Add would save.
+    extra: dict[str, str] = {}
+
+    @field_validator("extra", mode="before")
+    @classmethod
+    def _known_extra(cls, v, info: ValidationInfo):
+        return known_extra(info.data.get("kind"), v)
 
 
 class ProposalReply(BaseModel):

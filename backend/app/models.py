@@ -10,6 +10,31 @@ CardKind = Literal[
     "project", "accomplishment", "education", "skill", "certificate", "behavioral"
 ]
 
+# The `extra` keys each kind uses, the ones the resume template prints. Everything else a card
+# says goes in title / description / details / tags.
+CARD_EXTRA_FIELDS: dict[str, tuple[str, ...]] = {
+    "education": ("location", "start_date", "end_date"),
+    "project": ("start_date", "end_date"),
+    "skill": ("category",),
+    "certificate": ("date",),
+    "accomplishment": (),
+    "behavioral": (),
+}
+MAX_EXTRA_CHARS = 100
+
+
+def known_extra(kind: str | None, extra) -> dict[str, str]:
+    """Only the known `extra` keys for `kind`, as stripped, non-empty, length-capped strings.
+    Unknown keys and non-string values are dropped."""
+    if not isinstance(extra, dict):
+        return {}
+    out = {}
+    for key in CARD_EXTRA_FIELDS.get(kind or "", ()):
+        value = extra.get(key)
+        if isinstance(value, str) and value.strip():
+            out[key] = value.strip()[:MAX_EXTRA_CHARS]
+    return out
+
 
 class JobBase(SQLModel):
     company: str
