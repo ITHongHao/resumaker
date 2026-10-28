@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
+const SUPPORTED_SCHEMA_VERSION = 1
+
 export default function Profile() {
   const [p, setP] = useState<ProfileT | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState<{ doc: unknown; jobs: number; cards: number } | null>(null)
   const file = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -38,15 +41,42 @@ export default function Profile() {
     })
   }
 
-  async function doImport(f: File) {
+  // Step 1: parse and validate only. Nothing is sent until the user confirms.
+  async function chooseFile(f: File) {
+    setMsg(null)
+    setError(null)
+    setPending(null)
+    let doc: { schema_version?: unknown; jobs?: unknown; cards?: unknown }
+    try {
+      doc = JSON.parse(await f.text())
+    } catch {
+      setError('That file is not valid JSON.')
+      return
+    }
+    if (doc === null || typeof doc !== 'object' || doc.schema_version !== SUPPORTED_SCHEMA_VERSION) {
+      setError(
+        `Unsupported or missing schema_version (${String((doc as { schema_version?: unknown } | null)?.schema_version ?? 'missing')}); expected ${SUPPORTED_SCHEMA_VERSION}. Nothing was imported.`,
+      )
+      return
+    }
+    setPending({
+      doc,
+      jobs: Array.isArray(doc.jobs) ? doc.jobs.length : 0,
+      cards: Array.isArray(doc.cards) ? doc.cards.length : 0,
+    })
+  }
+
+  function cancelImport() {
+    setPending(null)
+    if (file.current) file.current.value = ''
+  }
+
+  async function confirmImport() {
+    if (!pending) return
+    const { doc } = pending
     await guard(async () => {
-      let doc: unknown
-      try {
-        doc = JSON.parse(await f.text())
-      } catch {
-        throw new Error('That file is not valid JSON.')
-      }
       const r = await api.importAll(doc)
+      cancelImport()
       setP(await api.getProfile())
       return `Imported ${r.jobs} jobs and ${r.cards} cards.`
     })
@@ -107,12 +137,30 @@ export default function Profile() {
             aria-label="Import JSON file"
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) void doImport(f)
-              e.target.value = ''
+              if (f) void chooseFile(f)
             }}
           />
         </div>
         <p className="text-xs text-muted-foreground">Importing replaces all jobs, cards and your profile.</p>
+        {pending && (
+          <div role="alertdialog" aria-label="Confirm import" className="space-y-3 rounded-2xl border border-destructive/40 bg-destructive/5 p-4 text-sm">
+            <p>
+              Replace ALL current jobs, cards and your profile with this file? ({pending.jobs} jobs, {pending.cards} cards.) This
+              cannot be undone, and any unsaved profile edits will be lost. Export first if you want a backup.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => void doExport()}>
+                Export current data first
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => void confirmImport()}>
+                Confirm import
+              </Button>
+              <Button size="sm" variant="outline" onClick={cancelImport}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </section>
       {msg && <p role="status" className="text-sm text-muted-foreground">{msg}</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
