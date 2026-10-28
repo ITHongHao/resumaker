@@ -65,6 +65,10 @@ class CardBase(SQLModel):
 
 
 class Card(CardBase, table=True):
+    # AUTOINCREMENT: a deleted card's id is never given to a new card, so an interview answer
+    # citing it keeps showing "source removed" rather than an unrelated card.
+    __table_args__ = {"sqlite_autoincrement": True}
+
     id: int | None = Field(default=None, primary_key=True)
     # SQLModel cannot infer a column type from a Literal, so declare it explicitly.
     kind: CardKind = Field(sa_column=Column(String, nullable=False, index=True))
