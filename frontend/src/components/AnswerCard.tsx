@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import type { InterviewAnswer, StarParts } from '@/api'
 import { Button } from '@/components/ui/button'
@@ -24,12 +24,30 @@ export function StarForm({
 }) {
   const [v, setV] = useState<StarParts>(initial)
   const [id] = useState(() => Math.random().toString(36).slice(2))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const busy = useRef(false)
+  async function submit() {
+    if (busy.current) return
+    busy.current = true
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(v)
+    } catch (e) {
+      // Stay open with the user's text; the parent only closes the form on success.
+      setError((e as Error).message)
+    } finally {
+      busy.current = false
+      setSaving(false)
+    }
+  }
   return (
     <form
       className="space-y-3 rounded-2xl border border-border p-4"
       onSubmit={(e) => {
         e.preventDefault()
-        void onSave(v)
+        void submit()
       }}
     >
       {STAR.map(({ key, label }) => (
@@ -43,8 +61,9 @@ export function StarForm({
           />
         </div>
       ))}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
-        <Button type="submit" size="sm">Save answer</Button>
+        <Button type="submit" size="sm" disabled={saving}>Save answer</Button>
         <Button type="button" size="sm" variant="outline" onClick={onCancel}>Cancel</Button>
       </div>
     </form>
@@ -66,10 +85,12 @@ export function StarBody({ a }: { a: StarParts }) {
 
 export default function AnswerCard({
   answer,
+  index,
   onUpdate,
   onDelete,
 }: {
   answer: InterviewAnswer
+  index: number
   onUpdate: (id: number, v: StarParts) => Promise<void>
   onDelete: (id: number) => void
 }) {
@@ -100,8 +121,8 @@ export default function AnswerCard({
         </p>
       )}
       <div className="flex gap-2">
-        <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit answer</Button>
-        <Button size="sm" variant="destructive" onClick={() => onDelete(answer.id)}>Delete answer</Button>
+        <Button size="sm" variant="outline" aria-label={`Edit answer ${index}`} onClick={() => setEditing(true)}>Edit answer</Button>
+        <Button size="sm" variant="destructive" aria-label={`Delete answer ${index}`} onClick={() => onDelete(answer.id)}>Delete answer</Button>
       </div>
     </article>
   )
