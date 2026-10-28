@@ -11,7 +11,6 @@ const SECTIONS: { kind: CardKind; title: string; add: string }[] = [
   { kind: 'project', title: 'Projects', add: 'Add project' },
   { kind: 'skill', title: 'Skills', add: 'Add skill' },
   { kind: 'certificate', title: 'Certificates', add: 'Add certificate' },
-  { kind: 'behavioral', title: 'Behavioral answers', add: 'Add behavioral answer' },
 ]
 
 export default function Record() {
@@ -35,10 +34,10 @@ export default function Record() {
   }, [load])
 
   const countFor = (jobId: number) => cards.filter((c) => c.job_id === jobId).length
-  // Job-less cards of a kind no section lists (an accomplishment from an older import), so
-  // no saved card is ever invisible.
+  // Job-less cards of a kind no section lists (an accomplishment from an older import).
+  // Behavioral answers live on the Interview tab and are not listed here.
   const sectionKinds = new Set(SECTIONS.map((s) => s.kind))
-  const others = cards.filter((c) => c.job_id === null && !sectionKinds.has(c.kind))
+  const others = cards.filter((c) => c.job_id === null && c.kind !== 'behavioral' && !sectionKinds.has(c.kind))
 
   return (
     <div className="space-y-10">

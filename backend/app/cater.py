@@ -252,7 +252,7 @@ def _citable(card: Card) -> Card | None:
     """What of a card can reach a resume: the whole card when a bullet can be written from it
     (_is_source); otherwise only the fields the template prints for skills (title, category),
     certificates (title, description, date) and education (title, degree line, location,
-    dates). None for cards nothing prints (behavioral answers, job-less accomplishments, cards
+    dates). None for cards nothing prints (legacy behavioral answers, job-less accomplishments, cards
     with only a title)."""
     if _is_source(card):
         return card

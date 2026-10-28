@@ -69,8 +69,10 @@ describe('Record', () => {
     expect(await screen.findByText(/Acme Corp/)).toBeInTheDocument()
     const skills = screen.getByRole('region', { name: /skills/i })
     expect(await within(skills).findByText('Python')).toBeInTheDocument()
-    for (const n of [/employment/i, /education/i, /projects/i, /certificates/i, /behavioral/i])
+    for (const n of [/employment/i, /education/i, /projects/i, /certificates/i])
       expect(screen.getByRole('region', { name: n })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /behavioral/i })).toBeNull()
+    expect(screen.queryByRole('heading', { name: /behavioral/i })).toBeNull()
   })
 
   it('shows every saved card, including a job-less card of a kind with no section', async () => {
@@ -86,6 +88,20 @@ describe('Record', () => {
     expect(within(other).getByText('Operated a Kubernetes cluster')).toBeInTheDocument()
     expect(within(other).getByText(/not tied to a job/i)).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: /projects/i })).getByText('Ledger')).toBeInTheDocument()
+  })
+
+  it('shows no behavioral section and no behavioral card anywhere', async () => {
+    installFakeApi({
+      jobs: [job],
+      cards: [
+        { id: 8, job_id: null, kind: 'behavioral', title: 'Tell me about a conflict', description: 'STAR text', details: '', tags: [], extra: {} },
+      ],
+    })
+    render(<MemoryRouter><Record /></MemoryRouter>)
+    await screen.findByText(/Acme Corp/)
+    expect(screen.queryByText('Tell me about a conflict')).toBeNull()
+    expect(screen.queryByRole('region', { name: /other/i })).toBeNull()
+    expect(screen.queryByText(/behavioral/i)).toBeNull()
   })
 
   it('has no Other section when every card has a home', async () => {

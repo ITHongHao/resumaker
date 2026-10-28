@@ -17,7 +17,8 @@ Rules:
 - "reply" is a brief, friendly note to the user.
 Respond with JSON only."""
 
-_KINDS = list(get_args(CardKind))
+# Behavioral answers now live on the Interview tab; the model may not propose them.
+_KINDS = [k for k in get_args(CardKind) if k != "behavioral"]
 
 RESPONSE_SCHEMA = {
     "type": "object",
@@ -63,6 +64,13 @@ class ProposalReply(BaseModel):
     reply: str
     proposals: list[CardDraft] = []
     followups: list[str] = []
+
+    @field_validator("proposals", mode="before")
+    @classmethod
+    def _drop_behavioral(cls, v):
+        if isinstance(v, list):
+            return [p for p in v if not (isinstance(p, dict) and p.get("kind") == "behavioral")]
+        return v
 
 
 def _user_prompt(message: str, job: Job | None, history: list[dict]) -> str:

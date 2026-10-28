@@ -179,7 +179,8 @@ describe('AskAIDrawer', () => {
       // The Edit form offers every kind a job-less card may have, and not accomplishment.
       await user.click(screen.getByRole('button', { name: /^edit$/i }))
       const kinds = Array.from((screen.getByLabelText(/kind/i) as HTMLSelectElement).options).map((o) => o.value)
-      expect(kinds).toEqual(expect.arrayContaining(['project', 'education', 'skill', 'certificate', 'behavioral']))
+      expect(kinds).toEqual(expect.arrayContaining(['project', 'education', 'skill', 'certificate']))
+      expect(kinds).not.toContain('behavioral')
       await user.click(screen.getByRole('button', { name: /^save$/i }))
       expect(server.calls.some((c) => c.method === 'POST' && c.path === '/api/cards')).toBe(false)
       await user.selectOptions(screen.getByLabelText(/kind/i), 'project')

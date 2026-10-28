@@ -6,6 +6,7 @@ import AskAIDrawer from '@/components/AskAIDrawer'
 import CardSection from '@/components/CardSection'
 import JobForm from '@/components/JobForm'
 import { Button } from '@/components/ui/button'
+import { FIELDS, hasValue } from '@/lib/recordFields'
 
 export default function JobPage() {
   const id = Number(useParams().id)
@@ -37,6 +38,14 @@ export default function JobPage() {
   if (!job) return <p className="text-muted-foreground">Loading...</p>
 
   const dates = [job.start_date, job.end_date].filter(Boolean).join(' to ')
+  // Optional job fields that hold a value (location, manager, salary and so on).
+  const record = job as unknown as Record<string, unknown>
+  const details = FIELDS.job
+    .filter((f) => !['company', 'title', 'start_date', 'end_date'].includes(f.key))
+    .flatMap((f) => {
+      const val = f.column ? record[f.key] : job.extra?.[f.key]
+      return hasValue(val) ? [f.key === 'location' ? String(val) : `${f.label}: ${String(val)}`] : []
+    })
   return (
     <div className="space-y-6">
       <Link to="/record" className="text-sm text-muted-foreground hover:underline">
@@ -48,6 +57,7 @@ export default function JobPage() {
             {[job.company, dates].filter(Boolean).join(' · ')}
           </div>
           <h1 className="text-xl font-semibold">{job.title}</h1>
+          {details.length > 0 && <div className="text-sm text-muted-foreground">{details.join(' · ')}</div>}
         </div>
         <AskAIDrawer jobId={id} onAdded={() => void load()} />
       </div>

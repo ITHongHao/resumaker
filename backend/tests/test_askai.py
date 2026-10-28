@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.ai.askai import propose_cards
+from app.ai.askai import SYSTEM_PROMPT, propose_cards
 from app.ai.provider import AIError, NoKeyError, get_llm
 from app.main import app
 from app.models import Job
@@ -151,3 +151,18 @@ def test_prompt_without_job_steers_away_from_jobless_accomplishments():
     llm = FakeLLM(GOOD)
     propose_cards(llm, "I ran a cluster", Job(id=1, company="Acme", title="SRE"), [])
     assert "not about a specific job" not in llm.calls[0]["user"].lower()
+
+
+def test_schema_has_no_behavioral():
+    from app.ai.askai import RESPONSE_SCHEMA
+    enum = RESPONSE_SCHEMA["properties"]["proposals"]["items"]["properties"]["kind"]["enum"]
+    assert "behavioral" not in enum
+    assert "behavioral" not in SYSTEM_PROMPT.lower()
+
+
+def test_behavioral_proposal_is_dropped():
+    reply = {"reply": "ok", "followups": [], "proposals": [
+        {"kind": "behavioral", "title": "Conflict", "description": "STAR", "tags": []},
+        {"kind": "skill", "title": "Go", "description": "", "tags": []}]}
+    r = propose_cards(FakeLLM(reply), "hi", None, [])
+    assert [p.kind for p in r.proposals] == ["skill"]
