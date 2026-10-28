@@ -188,6 +188,11 @@ def _items(texts: list[str], indent: str) -> list[str]:
             + [indent + r"\resumeItemListEnd"])
 
 
+def _degree_line(card: Card) -> str:
+    parts = [_extra(card, k).strip() for k in ("degree_type", "field_of_study")]
+    return ", ".join(p for p in parts if p) or card.description
+
+
 def _education(cards: list[Card]) -> list[str]:
     if not cards:
         return []
@@ -195,7 +200,7 @@ def _education(cards: list[Card]) -> list[str]:
     for c in cards:
         out += [r"    \resumeSubheading",
                 f"      {{{_e(c.title)}}}{{{_e(_extra(c, 'location'))}}}",
-                f"      {{{_e(c.description)}}}"
+                f"      {{{_e(_degree_line(c))}}}"
                 f"{{{_dates(_extra(c, 'start_date'), _extra(c, 'end_date'))}}}"]
     out.append(r"  \resumeSubHeadingListEnd")
     return out

@@ -16,6 +16,7 @@ from dataclasses import asdict
 
 from pydantic import BaseModel, StrictInt, ValidationError, computed_field
 
+from app import recordfields
 from app.ai.provider import LLM, AIError
 from app.latex.escape import escape_latex
 from app.latex.template import Bullet, render_tex
@@ -190,8 +191,14 @@ def _sentence_start(text: str, pos: int) -> bool:
     return not before or before[-1] in _SENTENCE_END
 
 
+def _printed_extra(card: Card) -> dict:
+    """The `extra` entries the resume can print; stored-only keys are never evidence."""
+    printed = recordfields.printed_keys(card.kind)
+    return {k: v for k, v in (card.extra or {}).items() if k in printed}
+
+
 def _fields(card: Card) -> list[str]:
-    extra = [str(v) for v in (card.extra or {}).values() if v is not None]
+    extra = [str(v) for v in _printed_extra(card).values() if v is not None]
     return [f for f in (card.title, card.description, card.details, *extra) if f]
 
 
@@ -244,16 +251,14 @@ def _claims(text: str, requirement: Requirement) -> bool:
 def _citable(card: Card) -> Card | None:
     """What of a card can reach a resume: the whole card when a bullet can be written from it
     (_is_source); otherwise only the fields the template prints for skills (title, category),
-    certificates (title, description, date) and education (title, description, location,
+    certificates (title, description, date) and education (title, degree line, location,
     dates). None for cards nothing prints (behavioral answers, job-less accomplishments, cards
     with only a title)."""
     if _is_source(card):
         return card
-    printed = {"skill": ("category",), "certificate": ("date",),
-               "education": ("location", "start_date", "end_date")}.get(card.kind)
-    if printed is None or not card.title.strip():
+    if card.kind not in ("skill", "certificate", "education") or not card.title.strip():
         return None
-    extra = {k: v for k, v in (card.extra or {}).items() if k in printed}
+    extra = _printed_extra(card)
     description = "" if card.kind == "skill" else card.description
     return Card(id=card.id, job_id=card.job_id, kind=card.kind, title=card.title,
                 description=description, details="", tags=[], extra=extra)
@@ -384,7 +389,7 @@ def _prompt_card(card: Card) -> dict:
         "description": body[:MAX_CARD_PROMPT_CHARS],
         "details": details[:room],
         "tags": list(card.tags or []),
-        "extra": dict(card.extra or {}),
+        "extra": _printed_extra(card),
     }
 
 
