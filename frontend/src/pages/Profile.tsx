@@ -148,6 +148,10 @@ export default function Profile() {
               Replace ALL current jobs, cards and your profile with this file? ({pending.jobs} jobs, {pending.cards} cards.) This
               cannot be undone, and any unsaved profile edits will be lost. Export first if you want a backup.
             </p>
+            <p>
+              Existing resumes will be flagged as possibly out of date, and their links to Record cards may point to
+              different cards after the import.
+            </p>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => void doExport()}>
                 Export current data first

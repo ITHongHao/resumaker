@@ -33,6 +33,9 @@ describe('Profile import', () => {
     expect(panel).toHaveTextContent(/replace all current jobs, cards and your profile/i)
     expect(panel).toHaveTextContent('2 jobs, 3 cards')
     expect(panel).toHaveTextContent(/cannot be undone/i)
+    expect(panel).toHaveTextContent(
+      /existing resumes will be flagged as possibly out of date, and their links to record cards may point to different cards/i,
+    )
     expect(screen.getByRole('button', { name: /export current data first/i })).toBeInTheDocument()
     expect(importCalls(server)).toHaveLength(0)
   })
