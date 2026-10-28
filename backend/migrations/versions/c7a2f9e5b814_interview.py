@@ -60,13 +60,14 @@ def upgrade() -> None:
         "SELECT id, job_id, title, description, details, tags FROM card"
         " WHERE kind = 'behavioral' ORDER BY id")).fetchall()
     for _id, job_id, title, description, details, tags in cards:
-        action = description or ""
-        if details:
-            action += "\n\n" + details
         if isinstance(tags, str):
-            tags = json.loads(tags or "[]")
-        if tags:
-            action += "\n\nTags: " + ", ".join(tags)
+            try:
+                tags = json.loads(tags or "[]")
+            except ValueError:
+                tags = []
+        tags = [t for t in tags if isinstance(t, str) and t] if isinstance(tags, list) else []
+        parts = [description or "", details or "", f"Tags: {', '.join(tags)}" if tags else ""]
+        action = "\n\n".join(p for p in parts if p)
         res = bind.execute(
             sa.text("INSERT INTO interviewquestion (text, category) VALUES (:t, 'Mine')"),
             {"t": title})

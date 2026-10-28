@@ -1,8 +1,9 @@
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
-from sqlmodel import Session, col, delete, select
+from pydantic import BaseModel, field_validator
+from sqlmodel import Session, col, delete, func, select
 
 from app import interview
 from app.db import get_session
@@ -11,14 +12,37 @@ from app.models import Card, HiddenQuestion, InterviewAnswer, InterviewQuestion,
 router = APIRouter(prefix="/api/interview")
 
 
+_ID = re.compile(r"^[0-9]{1,9}$")  # ASCII digits only; also bounds the integer size
+
+
+def _clean_text(v):
+    if isinstance(v, str):
+        v = v.strip()
+        if not v:
+            raise ValueError("text cannot be blank")
+    return v
+
+
+def _check_category(v):
+    if v is not None and v not in interview.ALLOWED_CATEGORIES:
+        raise ValueError("unknown category")
+    return v
+
+
 class QuestionIn(BaseModel):
     text: str
     category: str = "Mine"
+
+    _t = field_validator("text")(classmethod(lambda cls, v: _clean_text(v)))
+    _c = field_validator("category")(classmethod(lambda cls, v: _check_category(v)))
 
 
 class QuestionPatch(BaseModel):
     text: str | None = None
     category: str | None = None
+
+    _t = field_validator("text")(classmethod(lambda cls, v: _clean_text(v)))
+    _c = field_validator("category")(classmethod(lambda cls, v: _check_category(v)))
 
 
 class HiddenIn(BaseModel):
@@ -47,14 +71,14 @@ class AnswerPatch(BaseModel):
 def _ref_exists(session: Session, ref: str) -> bool:
     if ref.startswith("b:"):
         return interview.builtin_for_ref(ref) is not None
-    if ref.startswith("c:") and ref[2:].isdigit():
+    if ref.startswith("c:") and _ID.match(ref[2:]):
         return session.get(InterviewQuestion, int(ref[2:])) is not None
     return False
 
 
 def _custom(session: Session, qid: str) -> InterviewQuestion:
     # The path segment is a string so a built-in ref ("b:...") is a 404, not a 422.
-    q = session.get(InterviewQuestion, int(qid)) if qid.isdigit() else None
+    q = session.get(InterviewQuestion, int(qid)) if _ID.match(qid) else None
     if q is None:
         raise HTTPException(404, f"Question {qid} not found")
     return q
@@ -76,16 +100,30 @@ def _check_job(session: Session, job_id: int | None) -> None:
         raise HTTPException(404, f"Job {job_id} not found")
 
 
+def _counts(session: Session, ref: str | None = None) -> dict[str, int]:
+    stmt = select(InterviewAnswer.question_ref, func.count()).group_by(InterviewAnswer.question_ref)
+    if ref is not None:
+        stmt = stmt.where(InterviewAnswer.question_ref == ref)
+    return {r: n for r, n in session.exec(stmt).all()}
+
+
 def _custom_json(q: InterviewQuestion, count: int) -> dict:
     return {"ref": f"c:{q.id}", "id": q.id, "text": q.text, "category": q.category,
             "builtin": False, "hidden": False, "answer_count": count}
 
 
-def _answer_json(session: Session, a: InterviewAnswer) -> dict:
+def _titles(session: Session, answers: list[InterviewAnswer]) -> dict[int, str]:
+    ids = {i for a in answers for i in (a.source_card_ids or [])}
+    if not ids:
+        return {}
+    rows = session.exec(select(Card.id, Card.title).where(col(Card.id).in_(ids))).all()
+    return dict(rows)
+
+
+def _answer_json(session: Session, a: InterviewAnswer, titles: dict[int, str] | None = None) -> dict:
     ids = list(a.source_card_ids or [])
-    titles = {}
-    if ids:
-        titles = {c.id: c.title for c in session.exec(select(Card).where(col(Card.id).in_(ids)))}
+    if titles is None:
+        titles = _titles(session, [a])
     sources = [{"id": i, "title": titles[i]} if i in titles else {"id": i, "removed": True}
                for i in ids]
     return {"id": a.id, "question_ref": a.question_ref, "situation": a.situation, "task": a.task,
@@ -95,9 +133,7 @@ def _answer_json(session: Session, a: InterviewAnswer) -> dict:
 
 @router.get("/questions")
 def list_questions(include_hidden: bool = False, session: Session = Depends(get_session)):
-    counts: dict[str, int] = {}
-    for a in session.exec(select(InterviewAnswer)).all():
-        counts[a.question_ref] = counts.get(a.question_ref, 0) + 1
+    counts = _counts(session)
     hidden = {h.ref for h in session.exec(select(HiddenQuestion)).all()}
     rows = []
     for b in interview.BUILTIN:
@@ -131,9 +167,7 @@ def patch_question(question_id: str, body: QuestionPatch, session: Session = Dep
     session.add(q)
     session.commit()
     session.refresh(q)
-    n = len(session.exec(select(InterviewAnswer).where(
-        InterviewAnswer.question_ref == f"c:{q.id}")).all())
-    return _custom_json(q, n)
+    return _custom_json(q, _counts(session, f"c:{q.id}").get(f"c:{q.id}", 0))
 
 
 @router.delete("/questions/{question_id}", status_code=204)
@@ -165,7 +199,9 @@ def list_answers(question_ref: str | None = None, session: Session = Depends(get
     stmt = select(InterviewAnswer).order_by(InterviewAnswer.id)
     if question_ref is not None:
         stmt = stmt.where(InterviewAnswer.question_ref == question_ref)
-    return [_answer_json(session, a) for a in session.exec(stmt).all()]
+    answers = session.exec(stmt).all()
+    titles = _titles(session, answers)
+    return [_answer_json(session, a, titles) for a in answers]
 
 
 @router.post("/answers", status_code=201)

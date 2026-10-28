@@ -16,6 +16,8 @@ CATEGORIES: tuple[str, ...] = (
     "Technical experience",
 )
 
+ALLOWED_CATEGORIES: frozenset[str] = frozenset(CATEGORIES) | {"Mine"}
+
 _L, _T, _F, _I, _P, _X = CATEGORIES
 
 BUILTIN: list[BuiltinQuestion] = [

@@ -53,7 +53,7 @@ def test_hide_and_unhide_builtin(client):
 def test_custom_question_crud_and_cascade_delete(client):
     q = _q(client)
     ref = f"c:{q['id']}"
-    r = client.patch(f"/api/interview/questions/{q['id']}", json={"text": "New", "category": "X"})
+    r = client.patch(f"/api/interview/questions/{q['id']}", json={"text": "New", "category": "Leadership"})
     assert r.status_code == 200 and r.json()["text"] == "New"
     a = _ans(client, ref).json()
     other = _ans(client, "b:most-technical").json()
@@ -86,7 +86,6 @@ def test_many_answers_per_question(client):
 
 
 def test_deleting_a_cited_card_marks_source_removed(client):
-    job = client.post("/api/jobs", json={"company": "Co", "title": "Dev"}).json()
     card = client.post("/api/cards", json={"kind": "project", "title": "Proj"}).json()
     a = _ans(client, "b:most-technical", source_card_ids=[card["id"], 98765, card["id"]]).json()
     assert a["source_card_ids"] == [card["id"]]
@@ -95,7 +94,6 @@ def test_deleting_a_cited_card_marks_source_removed(client):
     client.delete(f"/api/cards/{card['id']}")
     rows = client.get("/api/interview/answers?question_ref=b:most-technical").json()
     assert rows[0]["source_cards"] == [{"id": card["id"], "removed": True}]
-    assert job["id"]
 
 
 def test_deleting_job_nulls_answer_job_id(client):
@@ -105,3 +103,28 @@ def test_deleting_job_nulls_answer_job_id(client):
     assert client.delete(f"/api/jobs/{job['id']}").status_code == 204
     rows = client.get("/api/interview/answers?question_ref=b:most-technical").json()
     assert rows[0]["id"] == a["id"] and rows[0]["job_id"] is None
+
+
+def test_blank_text_and_bad_category_rejected(client):
+    for bad in ("", "   "):
+        assert client.post("/api/interview/questions", json={"text": bad}).status_code == 422
+    q = client.post("/api/interview/questions", json={"text": "  Hi  "}).json()
+    assert q["text"] == "Hi" and q["category"] == "Mine"
+    assert client.patch(f"/api/interview/questions/{q['id']}", json={"text": " "}).status_code == 422
+    assert client.patch(f"/api/interview/questions/{q['id']}", json={"category": "Nope"}).status_code == 422
+    assert client.post("/api/interview/questions", json={"text": "x", "category": "Nope"}).status_code == 422
+    assert client.post("/api/interview/questions", json={"text": "x", "category": "Leadership"}).status_code == 201
+
+
+def test_bad_refs_are_404_not_500(client):
+    for ref in ("c:\u00b2", "c:99999999999999999999", "c:", "x:1", "c:-1"):
+        assert _ans(client, ref).status_code == 404
+    assert client.patch("/api/interview/questions/\u00b2", json={"text": "x"}).status_code == 404
+    assert client.delete("/api/interview/questions/99999999999999999999").status_code == 404
+
+
+def test_patch_answer_job_id_null(client):
+    job = client.post("/api/jobs", json={"company": "Co", "title": "Dev"}).json()
+    a = _ans(client, "b:most-technical", job_id=job["id"]).json()
+    r = client.patch(f"/api/interview/answers/{a['id']}", json={"job_id": None})
+    assert r.status_code == 200 and r.json()["job_id"] is None
