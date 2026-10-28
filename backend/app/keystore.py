@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 from typing import Protocol
 
+from app.datadir import private_dir
+
 
 def home_dir() -> Path:
     return Path(os.environ.get("RESUMAKER_HOME") or Path.home() / ".resumaker")
@@ -32,7 +34,7 @@ class FileKeyStore:
     def set(self, provider: str, key: str) -> None:
         data = self._load()
         data[provider] = key
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        private_dir(self.path.parent)
         tmp = self.path.with_name(self.path.name + ".tmp")
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:

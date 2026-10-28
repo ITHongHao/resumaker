@@ -33,7 +33,7 @@ Open http://localhost:5173. Health check: http://localhost:5173/api/health
 
 ### Where your data lives
 
-Everything is stored under `~/.resumaker/`: the SQLite database (`resumaker.db`) and your API keys (`keys.json`, readable only by you). Override the locations with environment variables:
+Everything is stored under `~/.resumaker/` (a folder only you can open): the SQLite database (`resumaker.db`) and your API keys (`keys.json`), both readable only by you. Override the locations with environment variables:
 
     RESUMAKER_HOME=/path/to/dir   # keys.json lives here
     RESUMAKER_DB=/path/to/file.db # the database file (default: ~/.resumaker/resumaker.db)

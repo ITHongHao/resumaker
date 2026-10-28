@@ -10,6 +10,7 @@ from alembic.config import Config
 from sqlalchemy import Engine, event
 from sqlmodel import Session, create_engine, select
 
+from app.datadir import private_dir, private_file
 from app.models import Card, Job
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +26,7 @@ def db_url() -> str:
 
 @lru_cache
 def get_engine() -> Engine:
-    db_path().parent.mkdir(parents=True, exist_ok=True)
+    private_dir(db_path().parent)
     engine = create_engine(db_url(), connect_args={"check_same_thread": False})
 
     @event.listens_for(engine, "connect")
@@ -37,7 +38,10 @@ def get_engine() -> Engine:
 
 def init_db() -> None:
     """Apply Alembic migrations to the configured database."""
-    db_path().parent.mkdir(parents=True, exist_ok=True)  # first run: ~/.resumaker may not exist
+    # First run: ~/.resumaker may not exist. The file is created 0600 before SQLite opens it, so
+    # the Record is never readable by other users, even briefly; SQLite's journal files copy
+    # the database file's permissions.
+    private_file(db_path())
     cfg = Config(str(BACKEND_DIR / "alembic.ini"))
     cfg.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
     command.upgrade(cfg, "head")
