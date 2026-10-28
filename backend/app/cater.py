@@ -20,7 +20,7 @@ from app.ai.provider import LLM, AIError
 from app.latex.escape import escape_latex
 from app.latex.template import Bullet, render_tex
 from app.models import Card, Job, Posting, Profile, Requirement
-from app.scoring import Status, match_status, potential_score, score
+from app.scoring import Status, exact_or_alias, match_status, potential_score, score
 
 # One-page budget.
 MAX_BULLETS = 14
@@ -163,53 +163,160 @@ def requirements_of(posting: Posting) -> list[Requirement]:
     return [Requirement.model_validate(r) for r in posting.requirements or []]
 
 
+# --- what a card supports ---------------------------------------------------------
+
+# Requirement terms that are also everyday English words, in canonical casing. The scorer's
+# matching ("Go-to", "spring release", "Ruby anniversary") is too loose to count as support.
+AMBIGUOUS_TERMS: dict[str, str] = {t.lower(): t for t in (
+    "Go", "Rust", "Ruby", "Spring", "Swift", "Chef", "R", "Spark", "Flask", "Rails", "Express",
+    "Next", "Dart", "Julia", "Elm", "Hive", "Pig", "Flutter", "React", "Puppet",
+)}
+# Requirement kinds where a stem match ("mentored" for "mentoring") is real support. Skills and
+# tools are names, so a stem collision ("Reacted" for React) never is.
+STEM_KINDS = ("responsibility", "qualification")
+
+_RANK: dict[Status, int] = {"missing": 0, "partial": 1, "matched": 2}
+_LIST_SPLIT = re.compile(r"[,;/|()\n]")
+_SENTENCE_END = ".!?:;\n\u2022*-\u2013\u2014"
+
+
+def _canonical_re(canon: str) -> re.Pattern[str]:
+    """Case-sensitive whole word, not glued to a hyphen, apostrophe or "&" ("Go-to", "R&D")."""
+    return re.compile(rf"(?<![A-Za-z0-9&'\-]){re.escape(canon)}(?![A-Za-z0-9+#&'\-])")
+
+
+def _sentence_start(text: str, pos: int) -> bool:
+    before = text[:pos].rstrip(" \t\"'(\u201c")
+    return not before or before[-1] in _SENTENCE_END
+
+
+def _fields(card: Card) -> list[str]:
+    extra = [str(v) for v in (card.extra or {}).values() if v is not None]
+    return [f for f in (card.title, card.description, card.details, *extra) if f]
+
+
 def _card_text(card: Card) -> str:
     """Everything a card says: title, description, details, tags and extra values."""
-    parts = [card.title, card.description, card.details, *(str(t) for t in card.tags or [])]
-    parts += [str(v) for v in (card.extra or {}).values() if v is not None]
-    return "\n".join(p for p in parts if p)
+    return "\n".join([*_fields(card), *(str(t) for t in card.tags or [])])
 
 
-def _covers(card_text: str, term: str) -> bool:
-    return match_status(term, card_text) != "missing"
+def card_supports(card: Card, requirement: Requirement) -> bool:
+    """Whether the card itself mentions the requirement. The one predicate for support.
+
+    - Default: an exact whole-word/phrase match (case-insensitive) or an explicit alias
+      (k8s <-> Kubernetes) in the card's text or tags. Never a stem-only match, except for
+      responsibility/qualification terms, where the scorer's stem match also counts.
+    - Terms in AMBIGUOUS_TERMS ("Go", "Spring", ...) need stronger evidence: a tag equal to the
+      term; a skill card titled with it; an item of a comma/semicolon/slash-separated list equal
+      to it in canonical casing ("Python, Go"); or the term in canonical casing as a whole word
+      that is not the first word of a sentence or field and is not hyphenated ("written in Go").
+    """
+    term = requirement.term
+    canon = AMBIGUOUS_TERMS.get(term.strip().lower())
+    tags = [str(t).strip() for t in card.tags or [] if str(t).strip()]
+    if canon is not None:
+        if any(t.casefold() == canon.casefold() for t in tags):
+            return True
+        if card.kind == "skill" and card.title.strip().casefold() == canon.casefold():
+            return True
+        pattern = _canonical_re(canon)
+        for field in _fields(card):
+            if any(seg.strip() == canon for seg in _LIST_SPLIT.split(field)):
+                return True
+            if any(not _sentence_start(field, m.start()) for m in pattern.finditer(field)):
+                return True
+        return False
+    text = _card_text(card)
+    if exact_or_alias(term, text):
+        return True
+    return requirement.kind in STEM_KINDS and match_status(term, text) != "missing"
+
+
+def _claims(text: str, requirement: Requirement) -> bool:
+    """Whether generated text names the requirement outright (ambiguous terms: canonical casing
+    anywhere, even at the start of the sentence)."""
+    canon = AMBIGUOUS_TERMS.get(requirement.term.strip().lower())
+    if canon is not None:
+        return _canonical_re(canon).search(text) is not None
+    return exact_or_alias(requirement.term, text)
 
 
 def uncovered(missing: list[Requirement], cards: list[Card]) -> list[Requirement]:
-    """Requirements that no card's text or tags mention, under the score() matching rules."""
-    texts = [_card_text(c) for c in cards]
-    return [r for r in missing if not any(_covers(t, r.term) for t in texts)]
+    """Requirements that no card supports (see card_supports). Deterministic; no AI."""
+    return [r for r in missing if not any(card_supports(c, r) for c in cards)]
 
 
-# A number, with an optional leading "$" or trailing "%"/"percent"/"dollars"/"usd".
+# --- numbers ---------------------------------------------------------------------
+
+# "one" counts only before a scale word ("one million"); alone it is usually a pronoun.
+_SMALL_NUMBERS = {w: str(i) for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
+    "fifteen sixteen seventeen eighteen nineteen twenty".split()) if i}
+_SCALES = "dozen|hundred|thousand|million|billion"
+_WORDS = "|".join(w for w in _SMALL_NUMBERS if w != "one")
+# A number (digits, or a number word), with an optional "$" before it or "%"/"percent"/
+# "dollars"/"usd"/"x" after it.
 _NUMBER = re.compile(
-    r"(\$\s?)?(\d+(?:[.,]\d+)*)(\s?%|\s?percent\b|\s?dollars?\b|\s?usd\b)?", re.IGNORECASE
+    r"(\$\s?)?"
+    rf"(\d+(?:[.,]\d+)*|\b(?:{_WORDS})\b|\bone\b(?=[\s-]+(?:{_SCALES})s?\b))"
+    r"(\s?%|\s?percent\b|\s?dollars?\b|\s?usd\b|x\b|\u00d7)?",
+    re.IGNORECASE,
 )
+_SCALE = re.compile(rf"\b({_SCALES})s?\b", re.IGNORECASE)
+_MULTIPLIER = re.compile(r"\b(doubl|tripl|quadrupl|halv)(?:ed|es|ing)\b", re.IGNORECASE)
+_FOLD = re.compile(rf"\b(\d+|one|{_WORDS})-?fold\b", re.IGNORECASE)
 
 
-def _numbers(text: str) -> set[tuple[str, str]]:
+def _value(token: str) -> str:
+    token = token.lower()
+    return _SMALL_NUMBERS.get(token, token.replace(",", ""))
+
+
+def _quantities(text: str) -> set[tuple[str, str]]:
+    """(value, unit) pairs. unit is "" (bare), "%", "$", "x" (10x, threefold), "scale"
+    (dozen ... billion) or "mult" (doubled, tripled, quadrupled, halved). Number words one to
+    twenty map to digits, so "ten" and "10" are the same quantity."""
     out = set()
     for m in _NUMBER.finditer(text):
-        value = m.group(2).replace(",", "")
         suffix = (m.group(3) or "").strip().lower()
-        unit = "$" if m.group(1) or suffix in ("dollar", "dollars", "usd") else ("%" if suffix else "")
-        out.add((value, unit))
+        if m.group(1) or suffix in ("dollar", "dollars", "usd"):
+            unit = "$"
+        elif suffix in ("%", "percent"):
+            unit = "%"
+        elif suffix in ("x", "\u00d7"):
+            unit = "x"
+        else:
+            unit = ""
+        out.add((_value(m.group(2)), unit))
+    out |= {(m.group(1).lower(), "scale") for m in _SCALE.finditer(text)}
+    out |= {(m.group(1).lower(), "mult") for m in _MULTIPLIER.finditer(text)}
+    out |= {(_value(m.group(1)), "x") for m in _FOLD.finditer(text)}
     return out
 
 
 def _numbers_traceable(text: str, card_text: str) -> bool:
-    """Every number in `text` appears in the card (with the same % or $ when it has one)."""
-    have = _numbers(card_text)
-    values = {v for v, _ in have}
-    return all((v, u) in have if u else v in values for v, u in _numbers(text))
+    """Every quantity in `text` appears in the card: a bare number anywhere in the card, a
+    number with a unit (%, $, x) with that same unit, and every scale or multiplier word."""
+    have = _quantities(card_text)
+    values = {v for v, u in have if u not in ("scale", "mult")}
+    return all((v, u) in have if u else v in values for v, u in _quantities(text))
 
 
 def _traceable(text: str, card: Card, requirements: list[Requirement]) -> bool:
+    """Numbers trace to the card, and no requirement is credited beyond what the card supports:
+    text may not name a requirement the card does not support, nor earn more scorer credit for it
+    than the card's own wording does ("reacted" in both is fine; "React" is not)."""
     card_text = _card_text(card)
     if not _numbers_traceable(text, card_text):
         return False
-    return all(
-        match_status(r.term, text) == "missing" or _covers(card_text, r.term) for r in requirements
-    )
+    for r in requirements:
+        if card_supports(card, r):
+            continue
+        if _claims(text, r):
+            return False
+        if _RANK[match_status(r.term, text)] > _RANK[match_status(r.term, card_text)]:
+            return False
+    return True
 
 
 def _clean(text: str) -> str:
@@ -360,9 +467,8 @@ def build_resume(profile: Profile, jobs: list[Job], cards: list[Card], bullets: 
     ordered += [b for c in project_cards for b in bullets
                 if b.section == "projects" and b.source_card_id == c.id]
 
-    terms = [r.term for r in requirements]
     skills = [c for c in cards if c.kind == "skill" and c.title.strip()]
-    skills.sort(key=lambda c: not any(_covers(_card_text(c), t) for t in terms))
+    skills.sort(key=lambda c: not any(card_supports(c, r) for r in requirements))
     sections = {
         "education": [c for c in cards if c.kind == "education"][:MAX_EDUCATION],
         "projects": project_cards,
@@ -374,9 +480,6 @@ def build_resume(profile: Profile, jobs: list[Job], cards: list[Card], bullets: 
 
 # --- suggestions -------------------------------------------------------------------
 
-_RANK: dict[Status, int] = {"missing": 0, "partial": 1, "matched": 2}
-
-
 def suggest(llm: LLM, cards: list[Card], bullets: list[Bullet], missing: list[Requirement],
             requirements: list[Requirement] | None = None) -> list[Suggestion]:
     """At most one AI call, skipped when no bullet's own card supports any missing term.
@@ -384,9 +487,8 @@ def suggest(llm: LLM, cards: list[Card], bullets: list[Bullet], missing: list[Re
     `missing`) are the posting terms a rewrite may mention only if its card does.
     score_delta is left at 0; see with_deltas()."""
     by_id = {c.id: c for c in cards if c.id is not None}
-    card_texts = {cid: _card_text(c) for cid, c in by_id.items()}
     supported = {
-        i: [r.term for r in missing if _covers(card_texts[b.source_card_id], r.term)]
+        i: [r.term for r in missing if card_supports(by_id[b.source_card_id], r)]
         for i, b in enumerate(bullets)
         if b.source_card_id in by_id
     }
@@ -405,7 +507,7 @@ def suggest(llm: LLM, cards: list[Card], bullets: list[Bullet], missing: list[Re
     ])
     raw = llm.complete(SUGGEST_SYSTEM_PROMPT, user, json_schema=SUGGEST_SCHEMA)
 
-    canonical = {r.term.casefold(): r.term for r in missing}
+    canonical = {r.term.casefold(): r for r in missing}
     out: list[Suggestion] = []
     done: set[int] = set()
     for item in _items(raw, "suggestions", _SuggestItem):
@@ -420,9 +522,11 @@ def suggest(llm: LLM, cards: list[Card], bullets: list[Bullet], missing: list[Re
             continue
         if not _traceable(new, card, requirements if requirements is not None else missing):
             continue
-        terms = [canonical[t.strip().casefold()] for t in item.terms if t.strip().casefold() in canonical]
-        terms = [t for t in dict.fromkeys(terms)
-                 if _RANK[match_status(t, new)] > _RANK[match_status(t, bullet.text)]]
+        claimed = [canonical[t.strip().casefold()] for t in item.terms
+                   if t.strip().casefold() in canonical]
+        terms = [r.term for r in {id(r): r for r in claimed}.values()
+                 if card_supports(card, r)
+                 and _RANK[match_status(r.term, new)] > _RANK[match_status(r.term, bullet.text)]]
         if not terms:
             continue
         done.add(item.bullet_index)

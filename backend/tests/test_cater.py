@@ -7,6 +7,7 @@ from sqlmodel import Session, select
 from app import db
 from app.ai.provider import AIError
 from app.cater import (
+    card_supports,
     CATER_SYSTEM_PROMPT,
     SUGGEST_SYSTEM_PROMPT,
     RecordTooSmallError,
@@ -232,7 +233,7 @@ def test_bullet_mentioning_requirement_its_card_lacks_is_dropped():
 
 def test_cater_limits_bullets_per_card_and_job():
     llm = FakeLLM(cater_reply(*[(1, f"Built Airflow pipelines in Python, take {w}")
-                                for w in ("one", "two", "three")]))
+                                for w in ("alpha", "beta", "gamma")]))
     bullets = auto_cater(llm, _jobs(), _cards(), _posting())
     assert len(bullets) == 2  # MAX_BULLETS_PER_CARD
 
@@ -573,3 +574,134 @@ def test_build_resume_orders_recent_jobs_first_and_bullets_by_render_order():
     assert tex.index("New Co") < tex.index("Old Co")
     assert tex.count("School ") == MAX_EDUCATION and tex.count("Cert ") == MAX_CERTIFICATIONS
     assert "Python, Go" in tex  # skills the posting asks for come first
+
+
+# --- fix round 1: strict support and number words -------------------------------------
+
+# (card text, requirement, kind, a bullet that claims the requirement)
+PROBES = [
+    ("Reacted quickly to production incidents", "React", "skill", "Built React frontends"),
+    ("Sparked a team discussion", "Spark", "tool", "Ran Spark jobs"),
+    ("Removed rusted legacy code", "Rust", "skill", "Rewrote services in Rust"),
+    ("Labeled flasks in the lab", "Flask", "tool", "Built Flask APIs"),
+    ("Worked at the docks", "Docker", "tool", "Containerized apps with Docker"),
+    ("Go-to person for on-call", "Go", "skill", "Wrote Go services"),
+    ("Ruby anniversary party planning", "Ruby", "skill", "Built Ruby services"),
+    ("Shipped the spring release", "Spring", "tool", "Built Spring services"),
+]
+
+
+def _probe_cards(text):
+    return [
+        Card(id=1, kind="project", title="Work", description=text, tags=["Python"]),
+        Card(id=2, kind="project", title="Docs", description="Wrote documentation"),
+    ]
+
+
+@pytest.mark.parametrize("text,term,kind,claim", PROBES)
+def test_word_collisions_are_not_support(text, term, kind, claim):
+    requirement = Requirement(term=term, kind=kind, weight=2)
+    cards = _probe_cards(text)
+    # (a) the requirement is still uncovered
+    assert card_supports(cards[0], requirement) is False
+    assert uncovered([requirement], cards) == [requirement]
+
+    # (b) the cater prompt lists it as not in the Record; (c) a bullet claiming it is dropped
+    llm = FakeLLM(cater_reply((1, claim), (2, "Wrote documentation")))
+    bullets = auto_cater(llm, [], cards, _posting([requirement]))
+    assert [b.text for b in bullets] == ["Wrote documentation"]
+    not_in_record = llm.calls[0]["user"].split("Not in the Record")[1].split("Jobs")[0]
+    assert f"- {term}\n" in not_in_record + "\n"
+
+    # (d) the suggest prompt never offers it, and a suggestion claiming it is dropped
+    bullet = [Bullet("projects", None, "Handled the work", 1)]
+    llm = FakeLLM(suggest_reply((0, f"{claim} in Python", [term, "Python"], 1)))
+    out = suggest(llm, cards, bullet, [requirement, req("Python")])
+    assert out == []
+    user = llm.calls[0]["user"]
+    missing_section = user.split("Bullets that could cover them")[0]
+    assert f"- {term}\n" not in missing_section + "\n"
+    rows = json.loads(user.split("Bullets that could cover them:\n")[1].split("\n\nTheir source cards")[0])
+    assert rows[0]["terms_its_card_supports"] == ["Python"]
+
+
+@pytest.mark.parametrize("card,term,kind,claim", [
+    (Card(id=1, kind="project", title="UI", description="Built React frontends"), "React", "skill",
+     "Built React frontends for the shop"),
+    (Card(id=1, kind="project", title="Infra", description="Ran clusters", tags=["k8s"]), "Kubernetes",
+     "tool", "Ran Kubernetes clusters"),
+    (Card(id=1, kind="project", title="API", description="Wrote services", tags=["Go"]), "Go", "skill",
+     "Wrote Go services"),
+    (Card(id=1, kind="project", title="API", description="Wrote services in Go and Python"), "Go",
+     "skill", "Wrote Go services"),
+    (Card(id=1, kind="skill", title="Rust"), "Rust", "skill", None),
+])
+def test_real_mentions_still_support(card, term, kind, claim):
+    requirement = Requirement(term=term, kind=kind, weight=2)
+    assert card_supports(card, requirement) is True
+    assert uncovered([requirement], [card]) == []
+    if claim:
+        bullets = auto_cater(FakeLLM(cater_reply((1, claim))), [], [card], _posting([requirement]))
+        assert [b.text for b in bullets] == [claim]
+
+
+def test_stems_support_responsibilities_but_not_tools():
+    card = Card(id=1, kind="project", title="Team", description="Mentored juniors and reacted to alerts")
+    assert card_supports(card, Requirement(term="mentoring", kind="responsibility", weight=2))
+    assert not card_supports(card, Requirement(term="React", kind="skill", weight=2))
+    # The card's own wording is not a claim, even when the scorer would credit it.
+    bullets = auto_cater(FakeLLM(cater_reply((1, "Mentored juniors and reacted to alerts"))), [], [card],
+                         _posting([Requirement(term="React", kind="skill", weight=2)]))
+    assert [b.text for b in bullets] == ["Mentored juniors and reacted to alerts"]
+
+
+NUMBER_WORD_BULLETS = [
+    "Tripled revenue for the team",
+    "Doubled pipeline throughput",
+    "Halved report latency",
+    "Quadrupled test coverage",
+    "Served two million users",
+    "Reviewed a dozen designs",
+    "Fixed hundreds of bugs",
+    "Led ten engineers",
+    "Made queries 10x faster",
+    "Cut costs threefold",
+    "Grew usage 3-fold",
+    "Onboarded thousands of customers",
+    "Processed billions of events",
+]
+
+
+@pytest.mark.parametrize("claim", NUMBER_WORD_BULLETS)
+def test_number_words_not_in_card_are_dropped(claim):
+    cards = [Card(id=1, kind="project", title="Pipelines", description="Built pipelines for users"),
+             Card(id=2, kind="project", title="Docs", description="Wrote documentation")]
+    llm = FakeLLM(cater_reply((1, claim), (2, "Wrote documentation")))
+    assert [b.text for b in auto_cater(llm, [], cards, _posting([req("Python")]))] == ["Wrote documentation"]
+
+
+@pytest.mark.parametrize("claim", NUMBER_WORD_BULLETS)
+def test_number_words_in_card_are_allowed(claim):
+    card = Card(id=1, kind="project", title="Growth", description=(
+        "Tripled revenue, doubled throughput, halved latency and quadrupled coverage. Served two "
+        "million users, reviewed a dozen designs, fixed hundreds of bugs, led ten engineers, made "
+        "queries 10x faster, cut costs threefold, grew usage 3-fold, onboarded thousands of "
+        "customers and processed billions of events."))
+    bullets = auto_cater(FakeLLM(cater_reply((1, claim))), [], [card], _posting([req("Python")]))
+    assert [b.text for b in bullets] == [claim]
+
+
+@pytest.mark.parametrize("text,kept", [
+    ("Led ten engineers", True),  # ten == 10
+    ("Led 2 teams of ten", True),
+    ("Was one of the engineers who led a team", True),  # "one" and "a" are not quantities here
+    ("Served one million users", False),  # "one million" is a quantity the card lacks
+    ("Led three teams", False),
+    ("Led 3 teams", False),
+])
+def test_number_words_and_digits_are_interchangeable_and_one_is_not_a_number_alone(text, kept):
+    cards = [Card(id=1, kind="project", title="Team", description="Led 10 engineers on 2 teams"),
+             Card(id=2, kind="project", title="Docs", description="Wrote documentation")]
+    llm = FakeLLM(cater_reply((1, text), (2, "Wrote documentation")))
+    texts = [b.text for b in auto_cater(llm, [], cards, _posting([req("Python")]))]
+    assert texts == ([text] if kept else []) + ["Wrote documentation"]

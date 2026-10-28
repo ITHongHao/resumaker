@@ -132,3 +132,18 @@ def potential_score(requirements: list[Requirement], resume_text: str, replaceme
         if old and old in text:
             text = text.replace(old, new, 1)
     return score(requirements, text).score
+
+
+def exact_or_alias(term: str, text: str) -> bool:
+    """True when `text` holds `term` as a whole word/phrase (case-insensitive) or an explicit
+    ALIAS_GROUPS spelling of it. Unlike score(), there is no stem fallback."""
+    norm = _norm(term)
+    if not norm:
+        return False
+    lower = text.lower()
+    if _has_exact(norm, lower):
+        return True
+    return any(
+        norm in group and any(_has_exact(other, lower) for other in group if other != norm)
+        for group in ALIAS_GROUPS
+    )

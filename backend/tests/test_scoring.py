@@ -140,3 +140,14 @@ def test_match_status_uses_score_rules_on_plain_text():
     assert match_status("Java", "JavaScript only") == "missing"
     for term, text in [("C++", "C++ and C"), ("Rust", "Rust"), ("ML", "machine learning")]:
         assert match_status(term, text) == score([req(term)], text).matches[0].status
+
+
+def test_exact_or_alias_has_no_stem_fallback():
+    from app.scoring import exact_or_alias
+
+    assert exact_or_alias("Python", "wrote python")
+    assert exact_or_alias("Kubernetes", "ran k8s")
+    assert not exact_or_alias("React", "Reacted quickly")
+    assert not exact_or_alias("deployment", "deployed services")
+    # score() and match_status keep their stem-lenient grading.
+    assert status_of("React", "Reacted quickly") == "partial"
