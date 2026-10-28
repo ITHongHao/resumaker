@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.db import init_db
-from app.routes import portability, profile, record, settings
+from app.routes import ai, portability, profile, record, settings
 
 
 @asynccontextmanager
@@ -24,6 +24,7 @@ async def validation_error(_: Request, exc: RequestValidationError) -> JSONRespo
     return JSONResponse({"detail": detail}, status_code=422)
 
 
+app.include_router(ai.router)
 app.include_router(record.router)
 app.include_router(profile.router)
 app.include_router(settings.router)
