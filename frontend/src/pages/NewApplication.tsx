@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { api, ApiError, type Posting } from '@/api'
@@ -23,6 +23,9 @@ export default function NewApplication() {
   const [html, setHtml] = useState('')
   const [image, setImage] = useState<File | null>(null)
   const [posting, setPosting] = useState<Posting | null>(null)
+  // The input the current posting was read from; Auto cater only runs while the input still matches.
+  const [source, setSource] = useState<{ mode: Mode; value: string; file: File | null } | null>(null)
+  const caterLock = useRef(false)
   const [readError, setReadError] = useState('')
   const [readStatus, setReadStatus] = useState(0)
   const [reading, setReading] = useState(false)
@@ -30,7 +33,7 @@ export default function NewApplication() {
   const [catering, setCatering] = useState(false)
 
   const value = { text, url, html, image }[mode]
-  const canRead = !reading && (mode === 'image' ? image !== null : String(value ?? '').trim() !== '')
+  const canRead = !reading && !catering && (mode === 'image' ? image !== null : String(value ?? '').trim() !== '')
 
   async function read() {
     const form = new FormData()
@@ -40,21 +43,25 @@ export default function NewApplication() {
     setReadError('')
     setReadStatus(0)
     setCaterError(null)
-    setPosting(null)
     try {
-      setPosting(await api.createPosting(form))
+      // The previous posting is replaced only by a successful read.
+      const read = await api.createPosting(form)
+      setPosting(read)
+      setSource({ mode, value: mode === 'image' ? '' : String(value).trim(), file: mode === 'image' ? image : null })
     } catch (e) {
       const err = e as ApiError
       setReadError(err.message)
       setReadStatus(err.status)
-      if (err.fallback === 'paste_text') setMode('text') // inputs for every mode are kept
+      // inputs for every mode are kept; an earlier posting stays on screen
+      if (err.fallback === 'paste_text' && !posting) setMode('text')
     } finally {
       setReading(false)
     }
   }
 
   async function cater() {
-    if (!posting) return
+    if (!posting || !inputMatches || caterLock.current) return
+    caterLock.current = true
     setCatering(true)
     setCaterError(null)
     try {
@@ -63,11 +70,16 @@ export default function NewApplication() {
     } catch (e) {
       setCaterError(e as ApiError)
     } finally {
+      caterLock.current = false
       setCatering(false)
     }
   }
 
-  const ready = posting !== null && posting.requirements.length > 0
+  const inputMatches =
+    source !== null &&
+    source.mode === mode &&
+    (mode === 'image' ? source.file === image : source.value === String(value ?? '').trim())
+  const ready = posting !== null && posting.requirements.length > 0 && inputMatches
 
   return (
     <div className="space-y-5">
@@ -129,7 +141,15 @@ export default function NewApplication() {
           <div className="flex flex-wrap items-center gap-2">
             <b>{[posting.title, posting.company].filter(Boolean).join(' · ') || 'Untitled posting'}</b>
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Posting read</span>
+            {!inputMatches && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">From earlier input</span>
+            )}
           </div>
+          {!inputMatches && (
+            <p role="status" className="mt-1 text-sm text-amber-800">
+              Input changed since this posting was read. Read again to use it.
+            </p>
+          )}
           <p className="mt-2 text-sm text-muted-foreground">
             Found {posting.requirements.length} requirements:
           </p>

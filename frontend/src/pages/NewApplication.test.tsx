@@ -130,4 +130,94 @@ describe('NewApplication', () => {
     expect(await screen.findByText(/the ai service failed/i)).toBeInTheDocument()
     expect(screen.getByText('PyTorch')).toBeInTheDocument()
   })
+
+  it('editing the input after a read disables Auto cater until it matches again', async () => {
+    const server = setup(({ method, path }) =>
+      method === 'POST' && path === '/api/postings' ? { body: posting } : undefined)
+    const user = userEvent.setup()
+    await readPosting(user, 'posting A')
+    await screen.findByText(/posting read/i)
+    const cater = screen.getByRole('button', { name: /auto cater/i })
+    expect(cater).toBeEnabled()
+    const box = screen.getByLabelText(/posting text/i)
+    await user.type(box, ' edited')
+    expect(await screen.findByText(/input changed since this posting was read/i)).toBeInTheDocument()
+    expect(screen.getByText('PyTorch')).toBeInTheDocument()
+    expect(cater).toBeDisabled()
+    await user.type(box, '{Backspace>7/}')
+    expect(box).toHaveValue('posting A')
+    expect(cater).toBeEnabled()
+    expect(screen.queryByText(/input changed since/i)).not.toBeInTheDocument()
+    expect(server.calls.some((c) => c.path === '/api/applications')).toBe(false)
+  })
+
+  it.each([
+    [502, { detail: 'The AI service failed.' }, /the ai service failed/i],
+    [422, { fallback: 'paste_text', detail: 'No requirements could be found. Paste the posting text instead.' }, /no requirements could be found/i],
+  ])('a failed re-read (%i) keeps the earlier posting', async (status, body, msg) => {
+    let n = 0
+    setup(({ method, path }) => {
+      if (method === 'POST' && path === '/api/postings') return ++n === 1 ? { body: posting } : { status: status as number, body }
+    })
+    const user = userEvent.setup()
+    await readPosting(user)
+    await screen.findByText(/posting read/i)
+    await user.click(screen.getByRole('button', { name: /read again/i }))
+    expect(await screen.findByText(msg)).toBeInTheDocument()
+    expect(screen.getByText('PyTorch')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /auto cater/i })).toBeEnabled()
+  })
+
+  it('Read is disabled while Auto cater is in flight, and a double click sends one request', async () => {
+    let release: () => void = () => {}
+    const server = setup(({ method, path }) => {
+      if (method === 'POST' && path === '/api/postings') return { body: posting }
+    })
+    const base = server.override
+    server.override = (req) => base?.(req)
+    // hold the application request open
+    const realFetch = globalThis.fetch
+    vi.stubGlobal('fetch', vi.fn((url: string, opts?: RequestInit) =>
+      url === '/api/applications' && opts?.method === 'POST'
+        ? (server.calls.push({ method: 'POST', path: '/api/applications', body: JSON.parse(String(opts.body)) }),
+          new Promise((r) => { release = () => r({ ok: true, status: 201, json: async () => ({ id: 42 }) } as Response) }))
+        : realFetch(url, opts)))
+    const user = userEvent.setup()
+    await readPosting(user)
+    const cater = await screen.findByRole('button', { name: /auto cater/i })
+    await user.dblClick(cater)
+    expect(server.calls.filter((c) => c.path === '/api/applications')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: /read again/i })).toBeDisabled()
+    release()
+    expect(await screen.findByText('EDITOR PLACEHOLDER')).toBeInTheDocument()
+  })
+
+  it('the read request carries only the active mode field', async () => {
+    const server = setup(({ method, path }) =>
+      method === 'POST' && path === '/api/postings' ? { body: posting } : undefined)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('tab', { name: /url/i }))
+    await user.type(screen.getByLabelText(/posting url/i), 'https://example.com/j')
+    await user.click(screen.getByRole('tab', { name: /paste text/i }))
+    await readPosting(user, 'only text')
+    const call = server.calls.find((c) => c.path === '/api/postings')!
+    expect(call.body).toEqual({ text: 'only text' })
+  })
+
+  it('retrying after a cater error makes no second posting read', async () => {
+    let apps = 0
+    const server = setup(({ method, path }) => {
+      if (method === 'POST' && path === '/api/postings') return { body: posting }
+      if (method === 'POST' && path === '/api/applications')
+        return ++apps === 1 ? { status: 502, body: { detail: 'The AI service failed.' } } : { status: 201, body: { id: 9 } }
+    })
+    const user = userEvent.setup()
+    await readPosting(user)
+    await user.click(await screen.findByRole('button', { name: /auto cater/i }))
+    await screen.findByText(/the ai service failed/i)
+    await user.click(screen.getByRole('button', { name: /auto cater/i }))
+    expect(await screen.findByText('EDITOR PLACEHOLDER')).toBeInTheDocument()
+    expect(server.calls.filter((c) => c.path === '/api/postings')).toHaveLength(1)
+    expect(server.calls.filter((c) => c.path === '/api/applications')).toHaveLength(2)
+  })
 })
