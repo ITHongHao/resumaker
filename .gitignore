@@ -1,0 +1,5 @@
+.superpowers/
+node_modules/
+.venv/
+*.db
+__pycache__/
