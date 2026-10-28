@@ -1,14 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
-import { api, type Card, type CardDraft, type ChatTurn } from '@/api'
+import { api, type Card, type CardDraft, type ChatTurn, type Job } from '@/api'
 import CardForm, { KIND_LABELS } from '@/components/CardForm'
 import { TagChips } from '@/components/CardItem'
 import { Button } from '@/components/ui/button'
-import { EXTRA_FIELDS, knownExtra } from '@/lib/cardFields'
+import { EXTRA_FIELDS, JOB_KINDS, JOBLESS_ACCOMPLISHMENT, JOBLESS_KINDS, knownExtra } from '@/lib/cardFields'
 
 type Msg = { role: 'user' | 'assistant'; text: string; proposals?: CardDraft[]; followups?: string[] }
-
-const JOB_KINDS = ['project', 'accomplishment'] as const
 
 function ExtraList({ kind, extra }: { kind: CardDraft['kind']; extra: CardDraft['extra'] }) {
   const shown = knownExtra(kind, extra)
@@ -32,9 +30,12 @@ export default function AskAIDrawer({
   label = '✦ Ask AI',
   initialMessage = '',
   describedBy,
+  chooseJob = false,
 }: {
   /** Job the conversation is about, or null for something outside any job. */
   jobId: number | null
+  /** Let the user pick which job (or none) new cards belong to; `jobId` is the default. */
+  chooseJob?: boolean
   onAdded?: (c: Card) => void
   label?: string
   /** Prefills the message box when the drawer opens. It is not sent until the user presses Send. */
@@ -48,6 +49,24 @@ export default function AskAIDrawer({
   const [busy, setBusy] = useState(false)
   // Which proposal is being edited, as "msgIndex:proposalIndex"
   const [editing, setEditing] = useState<string | null>(null)
+  // Where accepted cards go. Fixed to jobId unless chooseJob.
+  const [parent, setParent] = useState<number | null>(jobId)
+  const [jobs, setJobs] = useState<Job[]>([])
+
+  useEffect(() => {
+    if (!open || !chooseJob) return
+    let live = true
+    api
+      .listJobs()
+      .then((j) => live && setJobs(j))
+      .catch(() => {
+        /* the picker then offers only "No job" */
+      })
+    return () => {
+      live = false
+    }
+  }, [open, chooseJob])
+  const kinds = parent === null ? JOBLESS_KINDS : JOB_KINDS
 
   async function send() {
     const message = text.trim()
@@ -56,7 +75,7 @@ export default function AskAIDrawer({
     setBusy(true)
     setError(null)
     try {
-      const r = await api.propose(jobId, message, history)
+      const r = await api.propose(parent, message, history)
       setMsgs((m) => [
         ...m,
         { role: 'user', text: message },
@@ -76,7 +95,7 @@ export default function AskAIDrawer({
     try {
       // Exactly the fields the proposal box (or the edit form) shows; nothing else the model sent.
       const card = await api.createCard({
-        job_id: jobId,
+        job_id: parent,
         kind: d.kind,
         title: d.title,
         description: d.description ?? '',
@@ -113,6 +132,26 @@ export default function AskAIDrawer({
                 ✕
               </Button>
             </div>
+            {chooseJob && (
+              <div className="mb-3 space-y-1 text-sm">
+                <label htmlFor="ask-ai-parent" className="font-medium">
+                  New cards belong to
+                </label>
+                <select
+                  id="ask-ai-parent"
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
+                  value={parent === null ? '' : String(parent)}
+                  onChange={(e) => setParent(e.target.value === '' ? null : Number(e.target.value))}
+                >
+                  <option value="">No job (a project, skill, certificate, ...)</option>
+                  {jobs.map((j) => (
+                    <option key={j.id} value={String(j.id)}>
+                      {[j.title, j.company].filter(Boolean).join(' at ')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex flex-1 flex-col gap-3 overflow-y-auto">
               <div className="max-w-[90%] rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2.5 text-sm">
                 Tell me about anything you worked on here. I will suggest cards; nothing is saved until you click Add.
@@ -130,7 +169,8 @@ export default function AskAIDrawer({
                         <CardForm
                           key={pi}
                           initial={p}
-                          kinds={[...JOB_KINDS]}
+                          kinds={kinds}
+                          jobless={parent === null}
                           onCancel={() => setEditing(null)}
                           onSave={(d) => accept(mi, pi, d)}
                           error={error}
@@ -149,8 +189,18 @@ export default function AskAIDrawer({
                           {p.details && <p className="my-1 text-muted-foreground">{p.details}</p>}
                           <ExtraList kind={p.kind} extra={p.extra} />
                           <TagChips tags={p.tags ?? []} />
+                          {parent === null && p.kind === 'accomplishment' && (
+                            <p className="mt-1 text-xs text-amber-800">
+                              {JOBLESS_ACCOMPLISHMENT} Pick a job above, or use Edit.
+                            </p>
+                          )}
                           <div className="mt-2 flex gap-2">
-                            <Button size="sm" className="rounded-full" onClick={() => accept(mi, pi, p)}>
+                            <Button
+                              size="sm"
+                              className="rounded-full"
+                              disabled={parent === null && p.kind === 'accomplishment'}
+                              onClick={() => accept(mi, pi, p)}
+                            >
                               Add
                             </Button>
                             <Button size="sm" variant="outline" className="rounded-full" onClick={() => setEditing(`${mi}:${pi}`)}>

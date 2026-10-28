@@ -18,7 +18,8 @@ export default function CardSection({
   jobId: number | null
   cards: Card[]
   kinds: CardKind[]
-  addLabel: string
+  /** Omitted: no add button (a section that only lists what exists). */
+  addLabel?: string
   onChanged: () => void
 }) {
   const [adding, setAdding] = useState(false)
@@ -44,6 +45,7 @@ export default function CardSection({
             key={c.id}
             initial={c}
             kinds={kinds}
+            jobless={jobId === null}
             error={error}
             onCancel={() => setEditing(null)}
             onSave={(d: CardDraft) => run(() => api.updateCard(c.id, d), () => setEditing(null))}
@@ -63,11 +65,12 @@ export default function CardSection({
       {adding ? (
         <CardForm
           kinds={kinds}
+          jobless={jobId === null}
           error={error}
           onCancel={() => setAdding(false)}
           onSave={(d) => run(() => api.createCard({ ...d, job_id: jobId }), () => setAdding(false))}
         />
-      ) : (
+      ) : addLabel === undefined ? null : (
         <button
           type="button"
           className={addClass}

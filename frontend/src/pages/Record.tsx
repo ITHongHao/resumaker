@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { api, type Card, type CardKind, type Job } from '@/api'
 import CardSection from '@/components/CardSection'
 import JobForm from '@/components/JobForm'
+import { JOBLESS_KINDS } from '@/lib/cardFields'
 
 const SECTIONS: { kind: CardKind; title: string; add: string }[] = [
   { kind: 'education', title: 'Education', add: 'Add education' },
@@ -34,6 +35,10 @@ export default function Record() {
   }, [load])
 
   const countFor = (jobId: number) => cards.filter((c) => c.job_id === jobId).length
+  // Job-less cards of a kind no section lists (an accomplishment from an older import), so
+  // no saved card is ever invisible.
+  const sectionKinds = new Set(SECTIONS.map((s) => s.kind))
+  const others = cards.filter((c) => c.job_id === null && !sectionKinds.has(c.kind))
 
   return (
     <div className="space-y-10">
@@ -98,6 +103,17 @@ export default function Record() {
           />
         </section>
       ))}
+
+      {others.length > 0 && (
+        <section aria-label="Other" className="space-y-3">
+          <h2 className="text-sm font-semibold text-muted-foreground">Other</h2>
+          <p className="text-sm text-muted-foreground">
+            These cards are not tied to a job, so they cannot appear on a resume as they are. Edit one to
+            make it a project (or another kind), or add it again under the job it belongs to.
+          </p>
+          <CardSection jobId={null} cards={others} kinds={JOBLESS_KINDS} onChanged={() => void load()} />
+        </section>
+      )}
     </div>
   )
 }

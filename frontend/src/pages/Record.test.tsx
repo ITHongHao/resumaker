@@ -72,4 +72,26 @@ describe('Record', () => {
     for (const n of [/employment/i, /education/i, /projects/i, /certificates/i, /behavioral/i])
       expect(screen.getByRole('region', { name: n })).toBeInTheDocument()
   })
+
+  it('shows every saved card, including a job-less card of a kind with no section', async () => {
+    installFakeApi({
+      jobs: [job],
+      cards: [
+        { id: 6, job_id: null, kind: 'accomplishment', title: 'Operated a Kubernetes cluster', description: '', details: '', tags: [], extra: {} },
+        { id: 7, job_id: null, kind: 'project', title: 'Ledger', description: '', details: '', tags: [], extra: {} },
+      ],
+    })
+    render(<MemoryRouter><Record /></MemoryRouter>)
+    const other = await screen.findByRole('region', { name: /other/i })
+    expect(within(other).getByText('Operated a Kubernetes cluster')).toBeInTheDocument()
+    expect(within(other).getByText(/not tied to a job/i)).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: /projects/i })).getByText('Ledger')).toBeInTheDocument()
+  })
+
+  it('has no Other section when every card has a home', async () => {
+    installFakeApi({ jobs: [job], cards: [] })
+    render(<MemoryRouter><Record /></MemoryRouter>)
+    await screen.findByText(/Acme Corp/)
+    expect(screen.queryByRole('region', { name: /other/i })).toBeNull()
+  })
 })

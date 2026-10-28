@@ -36,6 +36,18 @@ def _check_job(session: Session, job_id: int | None) -> None:
         _get(session, Job, job_id)
 
 
+JOBLESS_ACCOMPLISHMENT = (
+    "An accomplishment must belong to a job. Choose the job it happened at, or save it as "
+    "another kind, such as a project."
+)
+
+
+def _check_parent(kind: str, job_id: int | None) -> None:
+    """A job-less accomplishment could never become a resume bullet, so it is not accepted."""
+    if kind == "accomplishment" and job_id is None:
+        raise HTTPException(422, JOBLESS_ACCOMPLISHMENT)
+
+
 @router.get("/jobs", response_model=list[Job])
 def list_jobs(session: Session = Depends(get_session)):
     return session.exec(select(Job).order_by(Job.id)).all()
@@ -94,6 +106,7 @@ def list_cards(
 
 @router.post("/cards", response_model=Card, status_code=201)
 def create_card(body: CardCreate, session: Session = Depends(get_session)):
+    _check_parent(body.kind, body.job_id)
     _check_job(session, body.job_id)
     card = Card.model_validate(body)
     session.add(card)
@@ -106,6 +119,8 @@ def create_card(body: CardCreate, session: Session = Depends(get_session)):
 def update_card(card_id: int, body: CardUpdate, session: Session = Depends(get_session)):
     card = _get(session, Card, card_id)
     data = _patch_data(body, frozenset({"job_id"}))
+    if "kind" in data or "job_id" in data:
+        _check_parent(data.get("kind", card.kind), data.get("job_id", card.job_id))
     _check_job(session, data.get("job_id"))
     card.sqlmodel_update(data)
     session.add(card)

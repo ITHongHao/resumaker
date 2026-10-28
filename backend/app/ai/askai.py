@@ -69,6 +69,10 @@ def _user_prompt(message: str, job: Job | None, history: list[dict]) -> str:
     parts = []
     if job is not None:
         parts.append(f"Job being discussed: {job.title} at {job.company}")
+    else:
+        parts.append("This conversation is not about a specific job, so do not use the kind "
+                     "accomplishment (it must belong to a job); use project, skill, certificate, "
+                     "education or behavioral instead.")
     if history:
         lines = [f"{h.get('role', 'user')}: {h.get('content', '')}" for h in history]
         parts.append("Conversation so far:\n" + "\n".join(lines))

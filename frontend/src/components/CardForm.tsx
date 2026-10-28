@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { JOBLESS_ACCOMPLISHMENT } from '@/lib/cardFields'
 
 export const KIND_LABELS: Record<CardKind, string> = {
   project: 'Project',
@@ -32,15 +33,21 @@ export default function CardForm({
   onCancel,
   error,
   saving,
+  jobless = false,
 }: {
   initial?: Partial<CardDraft>
   kinds: CardKind[]
+  /** The card belongs to no job, so it may not be an accomplishment. */
+  jobless?: boolean
   onSave: (d: CardDraft) => void
   onCancel: () => void
   error?: string | null
   saving?: boolean
 }) {
   const [kind, setKind] = useState<CardKind>(initial?.kind ?? kinds[0])
+  const [problem, setProblem] = useState<string | null>(null)
+  // A card whose kind is not offered here (an old import, a model proposal) still shows it.
+  const options = initial?.kind && !kinds.includes(initial.kind) ? [initial.kind, ...kinds] : kinds
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '))
@@ -50,14 +57,19 @@ export default function CardForm({
       className="space-y-3 rounded-2xl border border-border bg-card p-4"
       onSubmit={(e) => {
         e.preventDefault()
+        if (jobless && kind === 'accomplishment') {
+          setProblem(JOBLESS_ACCOMPLISHMENT)
+          return
+        }
+        setProblem(null)
         onSave({ kind, title: title.trim(), description, tags: parseTags(tags), extra: initial?.extra })
       }}
     >
-      {kinds.length > 1 && (
+      {options.length > 1 && (
         <div className="space-y-1">
           <Label htmlFor="card-kind">Kind</Label>
           <select id="card-kind" className={selectClass} value={kind} onChange={(e) => setKind(e.target.value as CardKind)}>
-            {kinds.map((k) => (
+            {options.map((k) => (
               <option key={k} value={k}>
                 {KIND_LABELS[k]}
               </option>
@@ -77,9 +89,9 @@ export default function CardForm({
         <Label htmlFor="card-tags">Tags (comma separated)</Label>
         <Input id="card-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
       </div>
-      {error && (
+      {(problem ?? error) && (
         <p role="alert" className="text-sm text-destructive">
-          {error}
+          {problem ?? error}
         </p>
       )}
       <div className="flex gap-2">

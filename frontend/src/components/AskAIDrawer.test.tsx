@@ -146,4 +146,57 @@ describe('AskAIDrawer', () => {
       extra: { start_date: '2021', end_date: '2022' },
     })
   })
+
+  describe('choosing where a gap card belongs', () => {
+    const jobs = [
+      { id: 7, company: 'Acme', title: 'SRE', location: '', employment_type: '', start_date: '', end_date: '', manager_contact: '', reason_for_leaving: '' },
+    ]
+    const k8s = {
+      reply: 'ok',
+      followups: [],
+      proposals: [{ kind: 'accomplishment', title: 'Operated a Kubernetes cluster', description: 'Ran it.', tags: [] }],
+    }
+
+    async function open() {
+      const server = installFakeApi({ jobs })
+      server.override = ({ path }) => (path === '/api/ai/propose' ? { body: k8s } : undefined)
+      const user = userEvent.setup()
+      render(<AskAIDrawer jobId={null} chooseJob label="Ask AI about it" initialMessage="Kubernetes?" />)
+      await user.click(screen.getByRole('button', { name: 'Ask AI about it' }))
+      const select = (await screen.findByLabelText(/belong to/i)) as HTMLSelectElement
+      await screen.findByRole('option', { name: /SRE at Acme/ })
+      return { server, user, select }
+    }
+
+    it('defaults to no job, and a job-less accomplishment cannot be added as is', async () => {
+      const { server, user, select } = await open()
+      expect(select.value).toBe('')
+      await user.click(screen.getByRole('button', { name: /send/i }))
+      await screen.findByText('Operated a Kubernetes cluster')
+      expect(screen.getByRole('button', { name: /^add$/i })).toBeDisabled()
+      expect(screen.getByText(/accomplishment must belong to a job/i)).toBeInTheDocument()
+
+      // The Edit form offers every kind a job-less card may have, and not accomplishment.
+      await user.click(screen.getByRole('button', { name: /^edit$/i }))
+      const kinds = Array.from((screen.getByLabelText(/kind/i) as HTMLSelectElement).options).map((o) => o.value)
+      expect(kinds).toEqual(expect.arrayContaining(['project', 'education', 'skill', 'certificate', 'behavioral']))
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
+      expect(server.calls.some((c) => c.method === 'POST' && c.path === '/api/cards')).toBe(false)
+      await user.selectOptions(screen.getByLabelText(/kind/i), 'project')
+      await user.click(screen.getByRole('button', { name: /^save$/i }))
+      const post = server.calls.find((c) => c.method === 'POST' && c.path === '/api/cards')!
+      expect(post.body).toMatchObject({ job_id: null, kind: 'project', title: 'Operated a Kubernetes cluster' })
+    })
+
+    it('picking a job saves the card under that job', async () => {
+      const { server, user, select } = await open()
+      await user.selectOptions(select, '7')
+      await user.click(screen.getByRole('button', { name: /send/i }))
+      await screen.findByText('Operated a Kubernetes cluster')
+      expect(server.calls.find((c) => c.path === '/api/ai/propose')?.body.job_id).toBe(7)
+      await user.click(screen.getByRole('button', { name: /^add$/i }))
+      const post = server.calls.find((c) => c.method === 'POST' && c.path === '/api/cards')!
+      expect(post.body).toMatchObject({ job_id: 7, kind: 'accomplishment' })
+    })
+  })
 })

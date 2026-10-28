@@ -31,3 +31,11 @@ export function knownExtra(kind: CardKind, extra: Record<string, unknown> | unde
   }
   return out
 }
+
+/** Kinds a card under a job may have, and kinds a card outside any job may have. */
+export const JOB_KINDS: CardKind[] = ['project', 'accomplishment']
+export const JOBLESS_KINDS: CardKind[] = ['project', 'education', 'skill', 'certificate', 'behavioral']
+
+/** Same rule and wording as the backend (POST /api/cards answers 422). */
+export const JOBLESS_ACCOMPLISHMENT =
+  'An accomplishment must belong to a job. Choose the job it happened at, or save it as another kind, such as a project.'

@@ -241,9 +241,29 @@ def _claims(text: str, requirement: Requirement) -> bool:
     return exact_or_alias(requirement.term, text)
 
 
+def _citable(card: Card) -> Card | None:
+    """What of a card can reach a resume: the whole card when a bullet can be written from it
+    (_is_source); otherwise only the fields the template prints for skills (title, category),
+    certificates (title, description, date) and education (title, description, location,
+    dates). None for cards nothing prints (behavioral answers, job-less accomplishments, cards
+    with only a title)."""
+    if _is_source(card):
+        return card
+    printed = {"skill": ("category",), "certificate": ("date",),
+               "education": ("location", "start_date", "end_date")}.get(card.kind)
+    if printed is None or not card.title.strip():
+        return None
+    extra = {k: v for k, v in (card.extra or {}).items() if k in printed}
+    description = "" if card.kind == "skill" else card.description
+    return Card(id=card.id, job_id=card.job_id, kind=card.kind, title=card.title,
+                description=description, details="", tags=[], extra=extra)
+
+
 def uncovered(missing: list[Requirement], cards: list[Card]) -> list[Requirement]:
-    """Requirements that no card supports (see card_supports). Deterministic; no AI."""
-    return [r for r in missing if not any(card_supports(c, r) for c in cards)]
+    """Requirements that no card supports (see card_supports), counting only what a resume can
+    actually use (see _citable): a card nobody can cite never hides a gap. Deterministic; no AI."""
+    usable = [u for u in (_citable(c) for c in cards) if u is not None]
+    return [r for r in missing if not any(card_supports(c, r) for c in usable)]
 
 
 # --- numbers ---------------------------------------------------------------------

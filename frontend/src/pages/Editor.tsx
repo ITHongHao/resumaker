@@ -323,6 +323,7 @@ export default function Editor() {
                 </span>
                 <AskAIDrawer
                   jobId={null}
+                  chooseJob
                   label="✦ Ask AI about it"
                   describedBy={`uncovered-${i}`}
                   initialMessage={`The job posting asks for "${r.term}". Have I done anything involving ${r.term} that I could add to my Record?`}

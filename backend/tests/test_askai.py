@@ -142,3 +142,12 @@ def test_propose_route_never_returns_unknown_extra(client, use_llm):
     assert r.status_code == 200
     assert r.json()["proposals"][0]["extra"] == {"start_date": "2021"}
     assert len(r.text) < 2000
+
+
+def test_prompt_without_job_steers_away_from_jobless_accomplishments():
+    llm = FakeLLM(GOOD)
+    propose_cards(llm, "I ran a cluster", None, [])
+    assert "not about a specific job" in llm.calls[0]["user"].lower()
+    llm = FakeLLM(GOOD)
+    propose_cards(llm, "I ran a cluster", Job(id=1, company="Acme", title="SRE"), [])
+    assert "not about a specific job" not in llm.calls[0]["user"].lower()
