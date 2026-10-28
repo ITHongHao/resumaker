@@ -10,6 +10,7 @@ from alembic.config import Config
 from sqlalchemy import Engine, event
 from sqlmodel import Session, create_engine, select
 
+from app import recordfields
 from app.datadir import private_dir, private_file
 from app.models import Card, Job
 
@@ -52,9 +53,20 @@ def get_session() -> Iterator[Session]:
         yield session
 
 
+def _hashed_card(card: Card) -> dict:
+    """A card for record_hash: without its stored-only fields (known keys the resume never
+    prints), which cannot make a resume out of date."""
+    stored_only = recordfields.extra_keys(card.kind) - set(recordfields.printed_keys(card.kind))
+    out = card.model_dump()
+    out["extra"] = {k: v for k, v in (card.extra or {}).items() if k not in stored_only}
+    return out
+
+
 def record_hash(session: Session) -> str:
-    """Stable hash of every job and card, for staleness detection."""
-    jobs = [j.model_dump() for j in session.exec(select(Job).order_by(Job.id))]
-    cards = [c.model_dump() for c in session.exec(select(Card).order_by(Card.id))]
+    """Stable hash of every job and card, for staleness detection. Job extras (nothing on a
+    resume prints them) and stored-only card fields are left out, which also keeps the hash of
+    a Record that has none of them identical to the hash from before those fields existed."""
+    jobs = [j.model_dump(exclude={"extra"}) for j in session.exec(select(Job).order_by(Job.id))]
+    cards = [_hashed_card(c) for c in session.exec(select(Card).order_by(Card.id))]
     blob = json.dumps({"jobs": jobs, "cards": cards}, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(blob.encode()).hexdigest()
