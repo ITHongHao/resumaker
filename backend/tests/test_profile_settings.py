@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 
@@ -24,6 +25,26 @@ def test_settings_never_returns_key(client, tmp_path, caplog):
     assert client.put("/api/settings", json={"provider": "openai", "model": None}).status_code == 422
     # key landed under the temp home, never the real one
     assert (home_dir()).is_relative_to(tmp_path)
+    saved = json.loads((tmp_path / "home" / "keys.json").read_text())
+    assert saved == {"anthropic": "sk-secret-123"}
+
+
+def test_validation_errors_never_echo_api_key(client):
+    key = "sk-leak-me-456"
+    r = client.put("/api/settings", json={"provider": "openai", "api_key": key})
+    assert r.status_code == 422 and key not in r.text
+    r = client.put("/api/settings", json={"provider": "openai", "model": 5, "api_key": key})
+    assert r.status_code == 422 and key not in r.text
+    r = client.put("/api/settings", json={"provider": "bogus", "model": "m", "api_key": key})
+    assert r.status_code == 422 and key not in r.text
+
+
+def test_422_detail_is_stripped_app_wide(client):
+    r = client.post("/api/jobs", json={"company": 5, "secret": "zzz"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail and all("loc" in e and "msg" in e and "type" in e for e in detail)
+    assert all("input" not in e and "ctx" not in e for e in detail)
 
 
 def test_filekeystore_file_mode_is_0600(tmp_path):
