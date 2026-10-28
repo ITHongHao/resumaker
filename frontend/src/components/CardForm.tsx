@@ -15,6 +15,7 @@ import {
   MAX_EXTRA_CHARS,
   TITLE_LABELS,
   visibleKeys,
+  YESNO_OPTIONS,
 } from '@/lib/recordFields'
 
 export const KIND_LABELS: Record<CardKind, string> = {
@@ -55,10 +56,13 @@ function FieldInput({
   }
   if (def.type === 'yesno') {
     return (
-      <select id={id} className={selectClass} value={value} onChange={(e) => onChange(e.target.value)}>
+      <select id={id} className={selectClass} value={value.trim().toLowerCase()} onChange={(e) => onChange(e.target.value)}>
         <option value="" />
-        <option value="Yes">Yes</option>
-        <option value="No">No</option>
+        {YESNO_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
       </select>
     )
   }

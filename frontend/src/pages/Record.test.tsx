@@ -41,6 +41,13 @@ describe('JobPage', () => {
     expect(post.body).toMatchObject({ job_id: 1, kind: 'project', title: 'Churn model', tags: ['ML', 'Airflow'] })
   })
 
+  it('shows stored yes/no job fields with their labels', async () => {
+    installFakeApi({ jobs: [{ ...job, extra: { currently_here: 'yes', ok_to_contact: 'no' } }] })
+    renderJob()
+    expect(await screen.findByText(/Currently work here: Yes/)).toBeInTheDocument()
+    expect(screen.getByText(/OK to contact: No/)).toBeInTheDocument()
+  })
+
   it('shows API validation errors readably and keeps the form', async () => {
     const server = installFakeApi({ jobs: [job] })
     server.override = ({ method, path }) =>

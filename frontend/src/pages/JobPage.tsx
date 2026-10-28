@@ -6,7 +6,7 @@ import AskAIDrawer from '@/components/AskAIDrawer'
 import CardSection from '@/components/CardSection'
 import JobForm from '@/components/JobForm'
 import { Button } from '@/components/ui/button'
-import { FIELDS, hasValue } from '@/lib/recordFields'
+import { displayValue, FIELDS, hasValue } from '@/lib/recordFields'
 
 export default function JobPage() {
   const id = Number(useParams().id)
@@ -44,7 +44,7 @@ export default function JobPage() {
     .filter((f) => !['company', 'title', 'start_date', 'end_date'].includes(f.key))
     .flatMap((f) => {
       const val = f.column ? record[f.key] : job.extra?.[f.key]
-      return hasValue(val) ? [f.key === 'location' ? String(val) : `${f.label}: ${String(val)}`] : []
+      return hasValue(val) ? [f.key === 'location' ? String(val) : `${f.label}: ${displayValue(f, String(val))}`] : []
     })
   return (
     <div className="space-y-6">

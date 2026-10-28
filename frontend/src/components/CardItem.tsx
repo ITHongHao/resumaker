@@ -1,6 +1,6 @@
 import type { Card } from '@/api'
 import { Button } from '@/components/ui/button'
-import { fieldsFor, knownExtra } from '@/lib/recordFields'
+import { displayValue, fieldsFor, knownExtra } from '@/lib/recordFields'
 
 export function TagChips({ tags }: { tags: string[] }) {
   if (!tags.length) return null
@@ -24,7 +24,7 @@ function CardExtra({ card }: { card: Card }) {
       {fields.map((f) => (
         <div key={f.key} className="flex gap-1">
           <dt>{f.label}:</dt>
-          <dd className="text-foreground">{values[f.key]}</dd>
+          <dd className="text-foreground">{displayValue(f, values[f.key])}</dd>
         </div>
       ))}
     </dl>

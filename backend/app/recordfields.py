@@ -36,7 +36,7 @@ def printed_keys(section: str) -> tuple[str, ...]:
 
 def clean_extra(section: str, extra: dict) -> dict:
     """Known keys become stripped strings capped at MAX_EXTRA_CHARS, empties dropped, yesno
-    values only "yes"/"no". Unknown keys pass through untouched."""
+    values only "yes"/"no" (any case, stored lowercase). Unknown keys pass through untouched."""
     known = {f["key"]: f for f in _extra_fields(section)}
     out = {}
     for key, value in extra.items():
@@ -47,7 +47,11 @@ def clean_extra(section: str, extra: dict) -> dict:
         if not isinstance(value, str):
             continue
         value = value.strip()[:MAX_EXTRA_CHARS]
-        if not value or (field["type"] == "yesno" and value not in ("yes", "no")):
+        if field["type"] == "yesno":
+            value = value.lower()
+            if value not in ("yes", "no"):
+                continue
+        if not value:
             continue
         out[key] = value
     return out

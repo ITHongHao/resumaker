@@ -41,6 +41,17 @@ test('record fields, add field menu, interview answers', async ({ page }) => {
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText('Deploy automation', { exact: true })).toBeVisible()
 
+  // Currently work here: stored as "yes", shown as "Yes", still set after a reload.
+  await page.getByRole('button', { name: 'Edit job details' }).click()
+  await page.getByLabel('Currently work here').selectOption({ label: 'Yes' })
+  await page.getByRole('button', { name: 'Save job' }).click()
+  await expect(page.getByText(/Currently work here: Yes/)).toBeVisible()
+  await page.reload()
+  await expect(page.getByText(/Currently work here: Yes/)).toBeVisible()
+  const harbor = ((await (await page.request.get('/api/jobs')).json()) as { title: string; extra: Record<string, string> }[])
+    .find((j) => j.title === 'Platform Engineer')
+  expect(harbor?.extra.currently_here).toBe('yes')
+
   // --- Interview: custom question, manual answer, AI draft accepted -----------------------
   await page.goto('/interview')
   await page.getByRole('button', { name: '+ Add my own question' }).click()

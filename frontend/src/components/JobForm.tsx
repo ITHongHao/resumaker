@@ -5,7 +5,7 @@ import AddFieldMenu from '@/components/AddFieldMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { type FieldDef, FIELDS, MAX_EXTRA_CHARS, visibleKeys } from '@/lib/recordFields'
+import { type FieldDef, FIELDS, formValue, MAX_EXTRA_CHARS, visibleKeys, YESNO_OPTIONS } from '@/lib/recordFields'
 
 const DEFS = FIELDS.job
 const COLUMNS = DEFS.filter((f) => f.column).map((f) => f.key)
@@ -16,15 +16,15 @@ function JobField({ def, value, onChange }: { def: FieldDef; value: string; onCh
   const id = `job-${def.key}`
   if (def.type === 'text')
     return <Input id={id} placeholder={def.placeholder} maxLength={def.column ? undefined : MAX_EXTRA_CHARS} value={value} onChange={(e) => onChange(e.target.value)} />
-  const options = def.type === 'yesno' ? ['Yes', 'No'] : (def.options ?? [])
-  const stray = value !== '' && !options.includes(value)
+  const options = def.type === 'yesno' ? YESNO_OPTIONS : (def.options ?? []).map((o) => ({ value: o, label: o }))
+  const stray = value !== '' && !options.some((o) => o.value === value)
   return (
     <select id={id} className={selectClass} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="" />
       {stray && <option value={value}>{value}</option>}
       {options.map((o) => (
-        <option key={o} value={o}>
-          {o}
+        <option key={o.value} value={o.value}>
+          {o.label}
         </option>
       ))}
     </select>
@@ -47,7 +47,7 @@ export default function JobForm({
     const out: Record<string, string> = {}
     for (const f of DEFS) {
       const raw = f.column ? (initial as unknown as Record<string, unknown> | undefined)?.[f.key] : initial?.extra?.[f.key]
-      out[f.key] = typeof raw === 'string' ? raw : ''
+      out[f.key] = typeof raw === 'string' ? formValue(f, raw) : ''
     }
     return out
   })

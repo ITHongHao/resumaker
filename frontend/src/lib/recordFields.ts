@@ -41,6 +41,23 @@ export function hasValue(v: unknown): boolean {
 
 export const MAX_EXTRA_CHARS = 100
 
+/** A yes/no field stores lowercase "yes"/"no" (as the backend does) and shows "Yes"/"No". */
+export const YESNO_OPTIONS = [
+  { value: 'yes', label: 'Yes' },
+  { value: 'no', label: 'No' },
+]
+
+/** The stored value as the form's select holds it: yes/no in lowercase, anything else as is. */
+export function formValue(def: FieldDef, v: string): string {
+  return def.type === 'yesno' ? v.trim().toLowerCase() : v
+}
+
+/** A stored value as the page shows it: yes/no as "Yes"/"No". */
+export function displayValue(def: FieldDef, v: string): string {
+  if (def.type !== 'yesno') return v
+  return YESNO_OPTIONS.find((o) => o.value === v.trim().toLowerCase())?.label ?? v
+}
+
 /** Every key some section's field list names; other `extra` keys come from an import. */
 export const KNOWN_KEYS = new Set(Object.values(FIELDS).flatMap((fs) => fs.map((f) => f.key)))
 

@@ -22,7 +22,8 @@ describe('JobForm', () => {
     render(<JobForm onSave={vi.fn()} onCancel={vi.fn()} />)
     const sel = screen.getByLabelText('Currently work here') as HTMLSelectElement
     expect(sel.tagName).toBe('SELECT')
-    expect(Array.from(sel.options).map((o) => o.value)).toEqual(['', 'Yes', 'No'])
+    expect(Array.from(sel.options).map((o) => o.value)).toEqual(['', 'yes', 'no'])
+    expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(['', 'Yes', 'No'])
     expect((screen.getByLabelText('Employment type') as HTMLSelectElement).tagName).toBe('SELECT')
   })
 
@@ -46,6 +47,7 @@ describe('JobForm', () => {
     const onSave = vi.fn()
     render(<JobForm initial={{ ...job, extra: { unknown_key: 'keep' } }} onSave={onSave} onCancel={vi.fn()} />)
     await user.selectOptions(screen.getByLabelText('Currently work here'), 'Yes')
+    expect(screen.getByLabelText('Currently work here')).toHaveValue('yes')
     await user.click(screen.getByRole('button', { name: /add field/i }))
     await user.click(screen.getByRole('menuitem', { name: 'Manager name' }))
     await user.type(screen.getByLabelText('Manager name'), 'Sam')
@@ -56,7 +58,24 @@ describe('JobForm', () => {
     const sent = onSave.mock.calls[0][0]
     expect(sent.manager_contact).toBe('sam@acme.com')
     expect(sent.company).toBe('Acme')
-    expect(sent.extra).toEqual({ unknown_key: 'keep', currently_here: 'Yes', manager_name: 'Sam' })
+    expect(sent.extra).toEqual({ unknown_key: 'keep', currently_here: 'yes', manager_name: 'Sam' })
     expect(sent.extra).not.toHaveProperty('manager_contact')
+  })
+
+  it('sends lowercase yes/no, the values the backend stores', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn()
+    render(<JobForm initial={{ ...job, extra: {} }} onSave={onSave} onCancel={vi.fn()} />)
+    await user.selectOptions(screen.getByLabelText('Currently work here'), 'Yes')
+    await user.click(screen.getByRole('button', { name: /save job/i }))
+    expect(onSave.mock.calls[0][0].extra.currently_here).toBe('yes')
+  })
+
+  it('shows a stored yes/no value as selected, whatever its case', () => {
+    render(<JobForm initial={{ ...job, extra: { currently_here: 'yes', ok_to_contact: 'No' } }} onSave={vi.fn()} onCancel={vi.fn()} />)
+    const sel = screen.getByLabelText('Currently work here') as HTMLSelectElement
+    expect(sel.value).toBe('yes')
+    expect(sel.selectedOptions[0].textContent).toBe('Yes')
+    expect(screen.getByLabelText('OK to contact')).toHaveValue('no')
   })
 })

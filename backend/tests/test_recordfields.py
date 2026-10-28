@@ -74,3 +74,18 @@ def test_job_extra_roundtrip(client):
     assert r.json()["extra"] == {"salary": "95k", "manager_name": "Bo"}
     assert client.get(f"/api/jobs/{jid}").json()["extra"] == {"salary": "95k", "manager_name": "Bo"}
     assert client.post("/api/jobs", json={"company": "B", "title": "T"}).json()["extra"] == {}
+
+
+def test_yesno_is_case_insensitive_and_stored_lowercase():
+    assert recordfields.clean_extra("job", {"ok_to_contact": " Yes "}) == {"ok_to_contact": "yes"}
+    assert recordfields.clean_extra("job", {"currently_here": "NO"}) == {"currently_here": "no"}
+
+
+def test_post_job_with_capitalised_yes_stores_lowercase(client):
+    """Contract with the frontend: whatever case arrives, "yes" is stored and returned."""
+    r = client.post("/api/jobs", json={"company": "Acme", "title": "SRE",
+                                       "extra": {"currently_here": "Yes", "ok_to_contact": "No"}})
+    assert r.status_code == 201, r.text
+    assert r.json()["extra"] == {"currently_here": "yes", "ok_to_contact": "no"}
+    jid = r.json()["id"]
+    assert client.get(f"/api/jobs/{jid}").json()["extra"]["currently_here"] == "yes"
