@@ -82,3 +82,56 @@ def test_record_hash_changes_when_card_edited(client):
     client.post("/api/jobs", json=JOB)
     with Session(db.get_engine()) as s:
         assert db.record_hash(s) != h2
+
+
+def _job(client):
+    return client.post("/api/jobs", json=JOB).json()
+
+
+def _card(client, **kw):
+    body = {"kind": "project", "title": "P", "tags": ["a"], "extra": {"k": 1}, **kw}
+    return client.post("/api/cards", json=body).json()
+
+
+@pytest.mark.parametrize("field", ["company", "title", "location", "end_date"])
+def test_patch_job_null_rejected_and_row_unchanged(client, field):
+    job = _job(client)
+    r = client.patch(f"/api/jobs/{job['id']}", json={field: None})
+    assert r.status_code == 422
+    assert client.get(f"/api/jobs/{job['id']}").json() == job
+
+
+@pytest.mark.parametrize("field", ["title", "kind", "tags", "extra", "description"])
+def test_patch_card_null_rejected_and_row_unchanged(client, field):
+    card = _card(client)
+    r = client.patch(f"/api/cards/{card['id']}", json={field: None})
+    assert r.status_code == 422
+    assert client.get("/api/cards").json() == [card]
+    assert client.get("/api/cards", params={"tag": "a"}).json() == [card]
+
+
+def test_patch_card_job_id_null_detaches(client):
+    job = _job(client)
+    card = _card(client, job_id=job["id"])
+    r = client.patch(f"/api/cards/{card['id']}", json={"job_id": None})
+    assert r.status_code == 200 and r.json()["job_id"] is None
+    client.delete(f"/api/jobs/{job['id']}")
+    assert len(client.get("/api/cards").json()) == 1
+
+
+def test_db_level_cascade_when_job_deleted_via_session(client):
+    from app.models import Job
+
+    job = _job(client)
+    _card(client, job_id=job["id"])
+    with Session(db.get_engine()) as s:
+        s.delete(s.get(Job, job["id"]))
+        s.commit()
+    assert client.get("/api/cards").json() == []
+
+
+def test_missing_rows_return_404(client):
+    assert client.patch("/api/jobs/999", json={"title": "x"}).status_code == 404
+    assert client.delete("/api/jobs/999").status_code == 404
+    assert client.patch("/api/cards/999", json={"title": "x"}).status_code == 404
+    assert client.delete("/api/cards/999").status_code == 404

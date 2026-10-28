@@ -22,6 +22,15 @@ def _get(session: Session, model, id: int):
     return obj
 
 
+def _patch_data(body, nullable: frozenset[str] = frozenset()) -> dict:
+    """Explicitly-set PATCH fields; null is a 422 unless the field is nullable."""
+    data = body.model_dump(exclude_unset=True)
+    bad = sorted(k for k, v in data.items() if v is None and k not in nullable)
+    if bad:
+        raise HTTPException(422, f"fields cannot be null: {', '.join(bad)}")
+    return data
+
+
 def _check_job(session: Session, job_id: int | None) -> None:
     if job_id is not None:
         _get(session, Job, job_id)
@@ -49,7 +58,7 @@ def get_job(job_id: int, session: Session = Depends(get_session)):
 @router.patch("/jobs/{job_id}", response_model=Job)
 def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_session)):
     job = _get(session, Job, job_id)
-    job.sqlmodel_update(body.model_dump(exclude_unset=True))
+    job.sqlmodel_update(_patch_data(body))
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -96,7 +105,7 @@ def create_card(body: CardCreate, session: Session = Depends(get_session)):
 @router.patch("/cards/{card_id}", response_model=Card)
 def update_card(card_id: int, body: CardUpdate, session: Session = Depends(get_session)):
     card = _get(session, Card, card_id)
-    data = body.model_dump(exclude_unset=True)
+    data = _patch_data(body, frozenset({"job_id"}))
     _check_job(session, data.get("job_id"))
     card.sqlmodel_update(data)
     session.add(card)
