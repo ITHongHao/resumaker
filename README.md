@@ -6,9 +6,28 @@ Local, single-user resume tailoring app (FastAPI + React/TypeScript). LaTeX only
 
 You keep a **Record**: your jobs, projects, accomplishments, education, skills and certificates, written once and edited by hand. When you paste a job posting under **New application**, Resumaker reads out its requirements, and **Auto cater** drafts a one-page LaTeX resume from your Record cards that speaks to those requirements. You land in the **Editor**: the `.tex` source beside a live PDF preview, a match score with per-requirement chips, and inline suggested rewrites you accept or reject one by one. Save keeps a numbered version; each tailored resume appears as a tile in the **Resumes** gallery. A resume is a snapshot: if you change the Record afterwards, it is flagged "Record changed since this was made" but never rewritten for you.
 
+### Record fields and the Add field menu
+
+Each kind of Record entry has the fields you would expect, such as Degree type, Field of study and GPA on education, or Employment type and Currently work here on a job. The common ones show by default. Less common ones (Minor, Honors and awards, Manager name, OK to contact, Salary, Reason for leaving, Role, Link or repo, Credential ID and so on) stay out of the way until you pick them from the **Add field** button on the form; a field that already holds a value is always shown. Select fields offer an "Other" choice with a free-text box. Some fields are printed on the resume and some are stored for your own reference only (a manager's name, a salary).
+
+### Interview
+
+The **Interview** tab is where you prepare behavioral answers. It lists built-in questions in categories (Leadership, Teamwork and conflict, Failure and learning, Initiative, Pressure and deadlines, Technical experience), and you can add your own questions, edit or delete them, and hide built-in ones you do not want. Each question holds any number of answers in STAR form (Situation, Task, Action, Result) that you write by hand. Behavioral answers are no longer cards on the Record page.
+
+Drafting is opt-in: **Draft an answer** (or Draft another version) is the only thing that calls the AI here. The draft is built from your Record cards, is shown as a suggestion, and is saved only when you press Accept; Reject discards it. An accepted answer records which cards it was built from.
+
+The code checks each draft after the model answers, and drops anything that fails:
+
+- It can verify that every cited card exists, that every number or number word in the draft appears in a cited card, and that every Record term it mentions (a card tag or a skill title, for example) is in a cited card.
+- It cannot verify a made-up tool or term that your Record never mentions, ordinals and spelled-out numbers above ninety-nine, or misspelled or spoofed terms.
+
+That is the same limit as Auto cater, so read every draft before you rely on it. Auto cater's number-word check also got stricter: half, twice, the tens words and fractions count as numbers, and "quarter" in the fiscal sense counts as a number too.
+
+If you had behavioral cards on the Record page, they were copied to the Interview tab as answers, and the originals are kept, hidden, in the database.
+
 ### Provenance and AI opt-in
 
-- The AI is opt-in. Nothing calls it until you press a button that says so: Read posting (to extract requirements from a posting), Auto cater, or Send in an Ask AI drawer. Typing in the editor, scoring and the live preview never call the AI. The match score is computed by plain code, not by a model.
+- The AI is opt-in. Nothing calls it until you press a button that says so: Read posting (to extract requirements from a posting), Auto cater, Send in an Ask AI drawer, or Draft an answer on the Interview tab. Typing in the editor, scoring and the live preview never call the AI. The match score is computed by plain code, not by a model.
 - The AI only proposes. Ask AI shows suggested cards, and nothing is saved until you click Add. Suggested rewrites in the editor change nothing until you click Accept.
 - Every generated bullet must trace back to a Record card. The code checks this after the model answers, and drops anything that does not pass: a bullet must cite a real card, may only use numbers that are in that card, and may only mention a requirement (a tool, skill, and so on) that the card itself supports. Requirements nothing in your Record supports are listed as "Not in your record yet" instead of being claimed.
 - Your data and your API key stay on your machine (see below). The only thing that leaves it is the text of the request you trigger, sent to the AI provider you chose.
@@ -38,7 +57,7 @@ Everything is stored under `~/.resumaker/` (a folder only you can open): the SQL
     RESUMAKER_HOME=/path/to/dir   # keys.json lives here
     RESUMAKER_DB=/path/to/file.db # the database file (default: ~/.resumaker/resumaker.db)
 
-Set them in the same shell that starts the backend, for example `RESUMAKER_HOME=/tmp/rm RESUMAKER_DB=/tmp/rm/r.db make dev`. The Record and Profile can be backed up and restored as JSON from the Profile page.
+Set them in the same shell that starts the backend, for example `RESUMAKER_HOME=/tmp/rm RESUMAKER_DB=/tmp/rm/r.db make dev`. The Record and Profile can be backed up and restored as JSON from the Profile page. Export is schema version 2 (it includes the Record fields and your Interview questions and answers); import still accepts version 1 files.
 
 ### Which requests the backend answers
 
@@ -48,7 +67,7 @@ The API has no login, so the backend refuses (HTTP 403) anything a web page on a
 
 ### Add an API key
 
-Open Settings, choose a provider (Anthropic or OpenAI), optionally set a model name, and paste your key. The key is saved only in `keys.json` on this machine, is never sent back to the browser, and is used only for the requests you trigger.
+Open Settings, choose a provider (Anthropic, OpenAI, or Custom for any OpenAI-compatible server such as a local model, which needs a Base URL and a model name and takes an optional key), optionally set a model name, and paste your key. The key is saved only in `keys.json` on this machine, is never sent back to the browser, and is used only for the requests you trigger.
 
 ### Tests
 

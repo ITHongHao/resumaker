@@ -23,7 +23,7 @@ async function addCard(page: Page, addLabel: string, title: string, description:
   await page.getByRole('button', { name: addLabel }).click()
   if (kind) await page.getByLabel('Kind').selectOption(kind)
   await page.getByLabel('Title').fill(title)
-  await page.getByLabel('Description').fill(description)
+  await page.getByLabel('What it did').fill(description)
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText(title, { exact: true })).toBeVisible()
 }
@@ -88,8 +88,8 @@ test('record -> posting -> auto cater -> editor -> save -> stale', async ({ page
   await page.goto('/record')
   const projects = page.getByRole('region', { name: 'Projects' })
   await projects.getByRole('button', { name: '+ Add project' }).click()
-  await page.getByLabel('Title').fill('Dashboard')
-  await page.getByLabel('Description').fill('Wrote a React dashboard for ops.')
+  await page.getByLabel('Name').fill('Dashboard')
+  await page.getByLabel('What it did').fill('Wrote a React dashboard for ops.')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(projects.getByText('Dashboard', { exact: true })).toBeVisible()
 
@@ -156,7 +156,7 @@ test('record -> posting -> auto cater -> editor -> save -> stale', async ({ page
   await page.goto('/record')
   await page.getByRole('link', { name: /Backend Engineer/ }).click()
   await page.getByRole('button', { name: 'Edit Billing service' }).click()
-  await page.getByLabel('Description').fill('Built a Python API with Docker for invoices and receipts.')
+  await page.getByLabel('What it did').fill('Built a Python API with Docker for invoices and receipts.')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText('invoices and receipts')).toBeVisible()
 
