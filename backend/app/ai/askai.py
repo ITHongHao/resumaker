@@ -13,7 +13,7 @@ Rules:
 - Propose only what the user actually said. Never invent employers, job titles, dates, numbers, metrics, tools, or results.
 - If a result or number is missing (how much, how many, how fast, what changed), do NOT make one up. Add a short follow-up question to "followups" asking for it, and keep the draft wording free of any figure the user did not give.
 - If the message holds nothing concrete enough for a card, return no proposals and ask follow-up questions instead.
-- Each card has a kind (project, accomplishment, education, skill, certificate, behavioral), a short title, a one or two sentence description in plain factual language, and optional tags.
+- Each card has a kind (project, accomplishment, education, skill, certificate), a short title, a one or two sentence description in plain factual language, and optional tags.
 - "reply" is a brief, friendly note to the user.
 Respond with JSON only."""
 
@@ -72,7 +72,7 @@ def _user_prompt(message: str, job: Job | None, history: list[dict]) -> str:
     else:
         parts.append("This conversation is not about a specific job, so do not use the kind "
                      "accomplishment (it must belong to a job); use project, skill, certificate, "
-                     "education or behavioral instead.")
+                     "education instead.")
     if history:
         lines = [f"{h.get('role', 'user')}: {h.get('content', '')}" for h in history]
         parts.append("Conversation so far:\n" + "\n".join(lines))

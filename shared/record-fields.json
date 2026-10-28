@@ -1,0 +1,346 @@
+{
+  "job": [
+    {
+      "key": "company",
+      "label": "Company",
+      "type": "text",
+      "default": true,
+      "printed": true,
+      "column": true
+    },
+    {
+      "key": "title",
+      "label": "Job title",
+      "type": "text",
+      "default": true,
+      "printed": true,
+      "column": true
+    },
+    {
+      "key": "location",
+      "label": "Location",
+      "type": "text",
+      "default": true,
+      "printed": true,
+      "column": true
+    },
+    {
+      "key": "employment_type",
+      "label": "Employment type",
+      "type": "select",
+      "options": [
+        "Full-time",
+        "Part-time",
+        "Contract",
+        "Internship",
+        "Freelance",
+        "Other"
+      ],
+      "default": true,
+      "printed": false,
+      "column": true
+    },
+    {
+      "key": "start_date",
+      "label": "Start date",
+      "type": "text",
+      "placeholder": "Jun 2021",
+      "default": true,
+      "printed": true,
+      "column": true
+    },
+    {
+      "key": "end_date",
+      "label": "End date",
+      "type": "text",
+      "placeholder": "Present",
+      "default": true,
+      "printed": true,
+      "column": true
+    },
+    {
+      "key": "currently_here",
+      "label": "Currently work here",
+      "type": "yesno",
+      "default": true,
+      "printed": false
+    },
+    {
+      "key": "manager_name",
+      "label": "Manager name",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "manager_contact",
+      "label": "Manager contact",
+      "type": "text",
+      "default": false,
+      "printed": false,
+      "column": true
+    },
+    {
+      "key": "ok_to_contact",
+      "label": "OK to contact",
+      "type": "yesno",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "salary",
+      "label": "Salary",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "reason_for_leaving",
+      "label": "Reason for leaving",
+      "type": "text",
+      "default": false,
+      "printed": false,
+      "column": true
+    }
+  ],
+  "education": [
+    {
+      "key": "location",
+      "label": "Location",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "start_date",
+      "label": "Start date",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "end_date",
+      "label": "End date",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "degree_type",
+      "label": "Degree type",
+      "type": "select",
+      "options": [
+        "Associate",
+        "Bachelor's",
+        "Master's",
+        "Doctorate",
+        "Certificate",
+        "Other"
+      ],
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "field_of_study",
+      "label": "Field of study",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "gpa",
+      "label": "GPA",
+      "type": "text",
+      "default": true,
+      "printed": false
+    },
+    {
+      "key": "gpa_scale",
+      "label": "GPA scale",
+      "type": "text",
+      "placeholder": "4.0",
+      "default": true,
+      "printed": false
+    },
+    {
+      "key": "status",
+      "label": "Status",
+      "type": "select",
+      "options": [
+        "Graduated",
+        "Attending",
+        "Expected"
+      ],
+      "default": true,
+      "printed": false
+    },
+    {
+      "key": "minor",
+      "label": "Minor",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "honors",
+      "label": "Honors and awards",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "clubs",
+      "label": "Clubs and activities",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "coursework",
+      "label": "Relevant coursework",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "notes",
+      "label": "Notes",
+      "type": "text",
+      "default": false,
+      "printed": false
+    }
+  ],
+  "project": [
+    {
+      "key": "start_date",
+      "label": "Start date",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "end_date",
+      "label": "End date",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "role",
+      "label": "Role",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "link",
+      "label": "Link or repo",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "team_size",
+      "label": "Team size",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "notes",
+      "label": "Notes",
+      "type": "text",
+      "default": false,
+      "printed": false
+    }
+  ],
+  "accomplishment": [
+    {
+      "key": "date",
+      "label": "Date",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "notes",
+      "label": "Notes",
+      "type": "text",
+      "default": false,
+      "printed": false
+    }
+  ],
+  "skill": [
+    {
+      "key": "category",
+      "label": "Category",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "level",
+      "label": "Level",
+      "type": "select",
+      "options": [
+        "Beginner",
+        "Intermediate",
+        "Advanced",
+        "Expert"
+      ],
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "years",
+      "label": "Years of experience",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "last_used",
+      "label": "Last used",
+      "type": "text",
+      "default": false,
+      "printed": false
+    }
+  ],
+  "certificate": [
+    {
+      "key": "date",
+      "label": "Issue date",
+      "type": "text",
+      "default": true,
+      "printed": true
+    },
+    {
+      "key": "issuer",
+      "label": "Issuer",
+      "type": "text",
+      "default": true,
+      "printed": false
+    },
+    {
+      "key": "expiry",
+      "label": "Expiry date",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "credential_id",
+      "label": "Credential ID",
+      "type": "text",
+      "default": false,
+      "printed": false
+    },
+    {
+      "key": "credential_link",
+      "label": "Credential link",
+      "type": "text",
+      "default": false,
+      "printed": false
+    }
+  ]
+}

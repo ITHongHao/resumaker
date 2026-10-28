@@ -114,12 +114,12 @@ def test_model_extra_is_sanitized_to_known_string_fields_per_kind():
         "proposals": [
             {"kind": "education", "title": "MIT", "description": "BS CS", "tags": [],
              "extra": {"location": "  Cambridge, MA ", "start_date": "2016", "end_date": 2020,
-                       "category": "should not be here", "gpa": "4.0", "date": "x" * 10_000,
+                       "category": "should not be here", "gpa": "4.0", "bogus": "x", "date": "x" * 10_000,
                        "evil": {"nested": True}}},
             {"kind": "skill", "title": "Go", "description": "", "tags": [],
              "extra": {"category": "L" * 5000, "start_date": "2020"}},
             {"kind": "accomplishment", "title": "Shipped", "description": "d", "tags": [],
-             "extra": {"location": "NYC", "notes": "secret"}},
+             "extra": {"location": "NYC", "bogus": "secret"}},
             {"kind": "certificate", "title": "AWS SA", "description": "", "tags": [],
              "extra": "not a dict"},
         ],
@@ -127,7 +127,7 @@ def test_model_extra_is_sanitized_to_known_string_fields_per_kind():
     }
     r = propose_cards(FakeLLM(reply), "hi", None, [])
     edu, skill, acc, cert = r.proposals
-    assert edu.extra == {"location": "Cambridge, MA", "start_date": "2016"}
+    assert edu.extra == {"location": "Cambridge, MA", "start_date": "2016", "gpa": "4.0"}
     assert set(skill.extra) == {"category"} and len(skill.extra["category"]) <= 100
     assert acc.extra == {}
     assert cert.extra == {}

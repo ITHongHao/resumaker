@@ -6,34 +6,22 @@ from pydantic import field_validator
 from sqlalchemy import JSON, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
+from app import recordfields
+
 CardKind = Literal[
     "project", "accomplishment", "education", "skill", "certificate", "behavioral"
 ]
 
-# The `extra` keys each kind uses, the ones the resume template prints. Everything else a card
-# says goes in title / description / details / tags.
-CARD_EXTRA_FIELDS: dict[str, tuple[str, ...]] = {
-    "education": ("location", "start_date", "end_date"),
-    "project": ("start_date", "end_date"),
-    "skill": ("category",),
-    "certificate": ("date",),
-    "accomplishment": (),
-    "behavioral": (),
-}
-MAX_EXTRA_CHARS = 100
 
 
 def known_extra(kind: str | None, extra) -> dict[str, str]:
-    """Only the known `extra` keys for `kind`, as stripped, non-empty, length-capped strings.
+    """Only the registry's known `extra` keys for `kind`, cleaned (see recordfields.clean_extra).
     Unknown keys and non-string values are dropped."""
     if not isinstance(extra, dict):
         return {}
-    out = {}
-    for key in CARD_EXTRA_FIELDS.get(kind or "", ()):
-        value = extra.get(key)
-        if isinstance(value, str) and value.strip():
-            out[key] = value.strip()[:MAX_EXTRA_CHARS]
-    return out
+    known = {f["key"] for f in recordfields.load().get(kind or "", []) if not f.get("column")}
+    cleaned = recordfields.clean_extra(kind or "", extra)
+    return {k: v for k, v in cleaned.items() if k in known}
 
 
 class JobBase(SQLModel):
@@ -49,10 +37,11 @@ class JobBase(SQLModel):
 
 class Job(JobBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    extra: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
 
 
 class JobCreate(JobBase):
-    pass
+    extra: dict = {}
 
 
 class JobUpdate(SQLModel):
@@ -64,6 +53,7 @@ class JobUpdate(SQLModel):
     end_date: str | None = None
     manager_contact: str | None = None
     reason_for_leaving: str | None = None
+    extra: dict | None = None
 
 
 class CardBase(SQLModel):

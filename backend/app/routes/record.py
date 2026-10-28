@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlmodel import Session, col, delete, select
 
+from app import recordfields
 from app.db import get_session
 from app.models import (
     Card,
@@ -48,6 +49,16 @@ def _check_parent(kind: str, job_id: int | None) -> None:
         raise HTTPException(422, JOBLESS_ACCOMPLISHMENT)
 
 
+BEHAVIORAL_MOVED = (
+    "Behavioral answers now live on the Interview tab. Add the question and its answers there."
+)
+
+
+def _check_new_kind(kind: str) -> None:
+    if kind == "behavioral":
+        raise HTTPException(422, BEHAVIORAL_MOVED)
+
+
 @router.get("/jobs", response_model=list[Job])
 def list_jobs(session: Session = Depends(get_session)):
     return session.exec(select(Job).order_by(Job.id)).all()
@@ -56,6 +67,7 @@ def list_jobs(session: Session = Depends(get_session)):
 @router.post("/jobs", response_model=Job, status_code=201)
 def create_job(body: JobCreate, session: Session = Depends(get_session)):
     job = Job.model_validate(body)
+    job.extra = recordfields.clean_extra("job", job.extra)
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -70,7 +82,10 @@ def get_job(job_id: int, session: Session = Depends(get_session)):
 @router.patch("/jobs/{job_id}", response_model=Job)
 def update_job(job_id: int, body: JobUpdate, session: Session = Depends(get_session)):
     job = _get(session, Job, job_id)
-    job.sqlmodel_update(_patch_data(body))
+    data = _patch_data(body)
+    if "extra" in data:
+        data["extra"] = recordfields.clean_extra("job", data["extra"])
+    job.sqlmodel_update(data)
     session.add(job)
     session.commit()
     session.refresh(job)
@@ -106,9 +121,11 @@ def list_cards(
 
 @router.post("/cards", response_model=Card, status_code=201)
 def create_card(body: CardCreate, session: Session = Depends(get_session)):
+    _check_new_kind(body.kind)
     _check_parent(body.kind, body.job_id)
     _check_job(session, body.job_id)
     card = Card.model_validate(body)
+    card.extra = recordfields.clean_extra(card.kind, card.extra)
     session.add(card)
     session.commit()
     session.refresh(card)
@@ -119,9 +136,15 @@ def create_card(body: CardCreate, session: Session = Depends(get_session)):
 def update_card(card_id: int, body: CardUpdate, session: Session = Depends(get_session)):
     card = _get(session, Card, card_id)
     data = _patch_data(body, frozenset({"job_id"}))
+    if "kind" in data and data["kind"] != card.kind:
+        _check_new_kind(data["kind"])
     if "kind" in data or "job_id" in data:
         _check_parent(data.get("kind", card.kind), data.get("job_id", card.job_id))
     _check_job(session, data.get("job_id"))
+    if "extra" in data or "kind" in data:
+        data["extra"] = recordfields.clean_extra(
+            data.get("kind", card.kind), data.get("extra", card.extra)
+        )
     card.sqlmodel_update(data)
     session.add(card)
     session.commit()
