@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import JobPage from '@/pages/JobPage'
 import Profile from '@/pages/Profile'
 import Record from '@/pages/Record'
-import ApplicationPlaceholder from '@/pages/ApplicationPlaceholder'
+import Editor from '@/pages/Editor'
 import Gallery from '@/pages/Gallery'
 import NewApplication from '@/pages/NewApplication'
 import Settings from '@/pages/Settings'
@@ -16,11 +16,12 @@ const link = ({ isActive }: { isActive: boolean }) =>
   )
 
 function App() {
-  const wide = useLocation().pathname === '/resumes'
+  const path = useLocation().pathname
+  const width = path.startsWith('/applications/') ? 'max-w-7xl' : path === '/resumes' ? 'max-w-5xl' : 'max-w-3xl'
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border">
-        <nav className={cn('mx-auto flex items-center gap-1 px-6 py-3', wide ? 'max-w-5xl' : 'max-w-3xl')}>
+        <nav className={cn('mx-auto flex items-center gap-1 px-6 py-3', width)}>
           <span className="mr-4 font-semibold">Resumaker</span>
           <NavLink to="/resumes" className={link}>Resumes</NavLink>
           <NavLink to="/record" className={link}>Record</NavLink>
@@ -28,12 +29,12 @@ function App() {
           <NavLink to="/settings" className={cn(link, 'ml-auto')}>Settings</NavLink>
         </nav>
       </header>
-      <main className={cn('mx-auto px-6 py-8', wide ? 'max-w-5xl' : 'max-w-3xl')}>
+      <main className={cn('mx-auto px-4 py-8 sm:px-6', width)}>
         <Routes>
           <Route path="/" element={<Navigate to="/record" replace />} />
           <Route path="/resumes" element={<Gallery />} />
           <Route path="/resumes/new" element={<NewApplication />} />
-          <Route path="/applications/:id" element={<ApplicationPlaceholder />} />
+          <Route path="/applications/:id" element={<Editor />} />
           <Route path="/record" element={<Record />} />
           <Route path="/record/jobs/:id" element={<JobPage />} />
           <Route path="/profile" element={<Profile />} />
