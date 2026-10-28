@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, SQLModel, delete, select
 
@@ -128,6 +130,20 @@ def import_all(doc: ExportDoc, session: Session = Depends(get_session)):
                 job_id=ad.job_id if ad.job_id in job_ids else None,
             ))
             n_answers += 1
+        if doc.schema_version == 1:
+            # A v1 document predates the Interview tab: its behavioral cards become questions
+            # and answers, as the upgrade migration does for a database. A v2 document carries
+            # its own Interview data, so nothing is converted there.
+            now = datetime.now(timezone.utc).isoformat()
+            for cd in sorted(doc.cards, key=lambda c: c.id):
+                if cd.kind != "behavioral":
+                    continue
+                question, answer = interview.behavioral_to_interview(Card(**cd.model_dump()), now)
+                session.add(question)
+                session.flush()
+                answer.question_ref = f"c:{question.id}"
+                session.add(answer)
+                n_answers += 1
         hidden = {r for r in (_resolve_ref(h, qmap) for h in doc.hidden_questions) if r}
         session.add_all(HiddenQuestion(ref=r) for r in sorted(hidden))
         session.commit()

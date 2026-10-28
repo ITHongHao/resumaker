@@ -79,3 +79,31 @@ def test_startup_path_fresh_and_existing(tmp_path, monkeypatch, old_db):
     con = sqlite3.connect(tmp_path / "fresh" / "f.db")
     assert con.execute("SELECT count(*) FROM interviewquestion").fetchone()[0] == 0
     con.close()
+
+
+def test_migration_and_v1_import_convert_identically(old_db):
+    """The migration keeps its own SQL (migrations never import app code); both must agree."""
+    from app import interview
+    from app.models import Card
+
+    path, jid = old_db
+    con = sqlite3.connect(path)
+    cards = con.execute("SELECT id, job_id, title, description, details, tags FROM card"
+                        " WHERE kind = 'behavioral' ORDER BY id").fetchall()
+    con.close()
+    command.upgrade(_cfg(), "head")
+    con = sqlite3.connect(path)
+    migrated = con.execute(
+        "SELECT q.text, q.category, a.situation, a.task, a.action, a.result, a.source_card_ids,"
+        " a.job_id FROM interviewanswer a JOIN interviewquestion q"
+        " ON a.question_ref = 'c:' || q.id ORDER BY a.id").fetchall()
+    con.close()
+    converted = []
+    for _id, job_id, title, desc, details, tags in cards:
+        q, a = interview.behavioral_to_interview(Card(
+            id=_id, job_id=job_id, kind="behavioral", title=title, description=desc,
+            details=details, tags=json.loads(tags)))
+        converted.append((q.text, q.category, a.situation, a.task, a.action, a.result,
+                          json.dumps(a.source_card_ids), a.job_id))
+    assert len(converted) == 3
+    assert migrated == converted

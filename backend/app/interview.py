@@ -6,7 +6,7 @@ from pydantic import BaseModel, StrictInt, StrictStr, ValidationError
 
 from app import cater
 from app.ai.provider import LLM, AIError
-from app.models import Card, Job, Requirement
+from app.models import Card, InterviewAnswer, InterviewQuestion, Job, Requirement
 
 
 class BuiltinQuestion(NamedTuple):
@@ -67,6 +67,31 @@ _BY_KEY = {q.key: q for q in BUILTIN}
 
 def builtin_for_ref(ref: str) -> BuiltinQuestion | None:
     return _BY_KEY.get(ref[2:]) if ref.startswith("b:") else None
+
+
+# --- Old behavioral cards ------------------------------------------------------------
+#
+# Behavioral answers used to be Record cards. Each one becomes a custom question (its title, in
+# "Mine") with one answer: the card's text in the Action part, the card's job kept. The card row
+# itself stays, hidden from the Record. Migration c7a2f9e5b814 does the same in plain SQL (a
+# migration never imports app code); tests check that the two agree.
+
+def behavioral_action(description: str, details: str, tags: list) -> str:
+    tags = [t for t in tags if isinstance(t, str) and t] if isinstance(tags, list) else []
+    parts = [description or "", details or "", f"Tags: {', '.join(tags)}" if tags else ""]
+    return "\n\n".join(p for p in parts if p)
+
+
+def behavioral_to_interview(card: Card, created_at: str = "") -> tuple[InterviewQuestion, InterviewAnswer]:
+    """The question and answer an old behavioral card becomes. The caller saves the question
+    first and then sets the answer's question_ref to "c:<question id>"."""
+    question = InterviewQuestion(text=card.title, category="Mine")
+    answer = InterviewAnswer(
+        question_ref="", situation="", task="", result="", source_card_ids=[],
+        action=behavioral_action(card.description, card.details, card.tags),
+        job_id=card.job_id, created_at=created_at,
+    )
+    return question, answer
 
 
 # --- AI drafting ---------------------------------------------------------------------

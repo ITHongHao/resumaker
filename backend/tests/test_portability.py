@@ -197,3 +197,32 @@ def test_import_failure_after_deletes_rolls_back_everything(client, monkeypatch)
         pass
     monkeypatch.undo()
     assert snap() == before
+
+
+def test_v1_import_converts_behavioral_cards_like_the_migration(client):
+    doc = {"schema_version": 1, "profile": {}, "jobs": [
+        {"id": 1, "company": "A", "title": "T"}], "cards": [
+        {"id": 2, "job_id": 1, "kind": "behavioral", "title": "Led a migration",
+         "description": "I led it.", "details": "More detail.", "tags": ["lead", "infra"]},
+        {"id": 3, "job_id": None, "kind": "skill", "title": "Py"}]}
+    r = client.post("/api/import", json=doc)
+    assert r.status_code == 200 and r.json()["interview_answers"] == 1
+    custom = [q for q in client.get("/api/interview/questions").json() if not q["builtin"]]
+    assert [(q["text"], q["category"], q["answer_count"]) for q in custom] == [
+        ("Led a migration", "Mine", 1)]
+    [a] = client.get("/api/interview/answers").json()
+    assert a["question_ref"] == custom[0]["ref"]
+    assert a["action"] == "I led it.\n\nMore detail.\n\nTags: lead, infra"
+    assert (a["situation"], a["task"], a["result"]) == ("", "", "")
+    assert a["source_card_ids"] == [] and a["job_id"] == 1 and a["created_at"]
+    # The original card row is still stored (hidden from the Record by its kind).
+    assert [c["kind"] for c in client.get("/api/cards").json()] == ["behavioral", "skill"]
+
+
+def test_v2_import_does_not_convert_behavioral_cards(client):
+    doc = {"schema_version": 2, "profile": {}, "jobs": [], "cards": [
+        {"id": 2, "job_id": None, "kind": "behavioral", "title": "Old story"}],
+        "interview_questions": [], "interview_answers": [], "hidden_questions": []}
+    assert client.post("/api/import", json=doc).status_code == 200
+    assert client.get("/api/interview/answers").json() == []
+    assert [q for q in client.get("/api/interview/questions").json() if not q["builtin"]] == []

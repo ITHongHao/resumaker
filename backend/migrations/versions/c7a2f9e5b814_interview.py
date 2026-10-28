@@ -53,7 +53,8 @@ def upgrade() -> None:
                     ['question_ref'], unique=False)
 
     # Data step: each old behavioral card becomes a custom question with one answer.
-    # The card rows stay.
+    # The card rows stay. app.interview.behavioral_to_interview does the same for a v1 import;
+    # a test checks the two agree (this file stays self-contained SQL).
     bind = op.get_bind()
     now = datetime.now(timezone.utc).isoformat()
     cards = bind.execute(sa.text(
