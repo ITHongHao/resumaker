@@ -66,11 +66,45 @@ export interface ProposalReply {
   followups: string[]
 }
 
+export type ApplicationStatus = 'not_applied' | 'applied' | 'interview' | 'offer' | 'rejected'
+
+export interface Requirement {
+  term: string
+  kind: 'skill' | 'tool' | 'responsibility' | 'qualification'
+  weight: number
+}
+export interface Posting {
+  id: number
+  source_kind: 'url' | 'text' | 'html' | 'image'
+  title: string
+  company: string
+  requirements: Requirement[]
+}
+export interface ApplicationSummary {
+  id: number
+  posting_id: number
+  status: ApplicationStatus
+  created_at: string
+  updated_at: string
+  title: string
+  company: string
+  score: number
+  version: number
+  // Not returned by the list endpoint today; the gallery shows them when present.
+  stale?: boolean
+  format?: string
+}
+export interface ApplicationCreated {
+  id: number
+}
+
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  fallback?: string
+  constructor(status: number, message: string, fallback?: string) {
     super(message)
     this.status = status
+    this.fallback = fallback
   }
 }
 
@@ -92,10 +126,11 @@ function describe(body: unknown, fallback: string): string {
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   let res: Response
   try {
+    const form = body instanceof FormData
     res = await fetch(url, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: body === undefined || form ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : form ? body : JSON.stringify(body),
     })
   } catch {
     throw new ApiError(0, 'Could not reach the Resumaker server. Is the backend running?')
@@ -107,7 +142,12 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, describe(parsed, `Request failed (${res.status})`) || `Request failed (${res.status})`)
+    const fallback = (parsed as { fallback?: unknown } | null)?.fallback
+    throw new ApiError(
+      res.status,
+      describe(parsed, `Request failed (${res.status})`) || `Request failed (${res.status})`,
+      typeof fallback === 'string' ? fallback : undefined,
+    )
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -140,6 +180,17 @@ export const api = {
 
   exportAll: () => request<unknown>('GET', '/api/export'),
   importAll: (doc: unknown) => request<{ jobs: number; cards: number }>('POST', '/api/import', doc),
+
+  createPosting: (form: FormData) => request<Posting>('POST', '/api/postings', form),
+  listApplications: (q: { q?: string; status?: ApplicationStatus | '' } = {}) => {
+    const p = new URLSearchParams()
+    if (q.q?.trim()) p.set('q', q.q.trim())
+    if (q.status) p.set('status', q.status)
+    const s = p.toString()
+    return request<ApplicationSummary[]>('GET', `/api/applications${s ? `?${s}` : ''}`)
+  },
+  createApplication: (posting_id: number) =>
+    request<ApplicationCreated>('POST', '/api/applications', { posting_id }),
 
   propose: (job_id: number | null, message: string, history: ChatTurn[]) =>
     request<ProposalReply>('POST', '/api/ai/propose', { job_id, message, history }),

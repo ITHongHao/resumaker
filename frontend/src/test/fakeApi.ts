@@ -7,7 +7,7 @@ type Handler = (req: { method: string; path: string; body: any }) => { status?: 
 export interface FakeServer {
   jobs: Job[]
   cards: Card[]
-  calls: { method: string; path: string; body: any }[]
+  calls: { method: string; path: string; body: any; search?: string }[]
   settings: { provider: string; model: string; has_key: boolean }
   override?: Handler
 }
@@ -24,10 +24,15 @@ export function installFakeApi(init: Partial<Pick<FakeServer, 'jobs' | 'cards'>>
     'fetch',
     vi.fn(async (url: string, opts: RequestInit = {}) => {
       const method = (opts.method ?? 'GET').toUpperCase()
-      const body = opts.body ? JSON.parse(String(opts.body)) : undefined
+      const body =
+        opts.body instanceof FormData
+          ? Object.fromEntries(opts.body.entries())
+          : opts.body
+            ? JSON.parse(String(opts.body))
+            : undefined
       const u = new URL(url, 'http://x')
       const path = u.pathname
-      s.calls.push({ method, path, body })
+      s.calls.push({ method, path, body, search: u.search })
       const json = (b: unknown, status = 200) =>
         ({ ok: status < 400, status, json: async () => b }) as Response
       const o = s.override?.({ method, path, body })
