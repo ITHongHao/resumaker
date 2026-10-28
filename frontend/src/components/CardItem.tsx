@@ -1,5 +1,6 @@
 import type { Card } from '@/api'
 import { Button } from '@/components/ui/button'
+import { EXTRA_FIELDS, knownExtra } from '@/lib/cardFields'
 
 export function TagChips({ tags }: { tags: string[] }) {
   if (!tags.length) return null
@@ -11,6 +12,22 @@ export function TagChips({ tags }: { tags: string[] }) {
         </span>
       ))}
     </div>
+  )
+}
+
+function CardExtra({ card }: { card: Card }) {
+  const values = knownExtra(card.kind, card.extra)
+  const fields = (EXTRA_FIELDS[card.kind] ?? []).filter((f) => values[f.key])
+  if (!fields.length) return null
+  return (
+    <dl className="mb-2.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+      {fields.map((f) => (
+        <div key={f.key} className="flex gap-1">
+          <dt>{f.label}:</dt>
+          <dd className="text-foreground">{values[f.key]}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -37,6 +54,13 @@ export default function CardItem({
         </div>
       </div>
       {card.description && <p className="mt-1.5 mb-2.5 text-sm leading-relaxed text-muted-foreground">{card.description}</p>}
+      <CardExtra card={card} />
+      {card.details && (
+        <p className="mb-2.5 text-xs leading-relaxed whitespace-pre-line text-muted-foreground">
+          <span className="font-medium">Details: </span>
+          {card.details}
+        </p>
+      )}
       <TagChips tags={card.tags} />
     </div>
   )

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { JOBLESS_ACCOMPLISHMENT } from '@/lib/cardFields'
+import { EXTRA_FIELDS, JOBLESS_ACCOMPLISHMENT, knownExtra, MAX_EXTRA_CHARS } from '@/lib/cardFields'
 
 export const KIND_LABELS: Record<CardKind, string> = {
   project: 'Project',
@@ -18,6 +18,13 @@ export const KIND_LABELS: Record<CardKind, string> = {
 
 const selectClass =
   'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
+
+const ALL_EXTRA_KEYS = new Set(Object.values(EXTRA_FIELDS).flatMap((fs) => fs.map((f) => f.key)))
+
+/** `extra` keys no form field edits (from an import); they are kept as they are. */
+function otherExtra(extra: Record<string, unknown> | undefined): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(extra ?? {}).filter(([k]) => !ALL_EXTRA_KEYS.has(k)))
+}
 
 export function parseTags(s: string): string[] {
   return s
@@ -51,6 +58,17 @@ export default function CardForm({
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [tags, setTags] = useState((initial?.tags ?? []).join(', '))
+  const [details, setDetails] = useState(initial?.details ?? '')
+  // Every known field's value, kept across kind switches; only the current kind's are saved.
+  const [fields, setFields] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(initial?.extra ?? {}).flatMap(([k, v]) => (ALL_EXTRA_KEYS.has(k) && typeof v === 'string' ? [[k, v]] : [])),
+    ),
+  )
+
+  // A project under a job prints as that job's bullets, without its own dates, so its date
+  // fields are only offered for a standalone project.
+  const shownFields = kind === 'project' && !jobless ? [] : (EXTRA_FIELDS[kind] ?? [])
 
   return (
     <form
@@ -62,7 +80,20 @@ export default function CardForm({
           return
         }
         setProblem(null)
-        onSave({ kind, title: title.trim(), description, tags: parseTags(tags), extra: initial?.extra })
+        onSave({
+          kind,
+          title: title.trim(),
+          description,
+          details,
+          tags: parseTags(tags),
+          // Only the fields this form shows (plus untouched imported keys); nothing hidden.
+          extra: {
+            ...otherExtra(initial?.extra),
+            ...Object.fromEntries(
+              Object.entries(knownExtra(kind, fields)).filter(([k]) => shownFields.some((f) => f.key === k)),
+            ),
+          },
+        })
       }}
     >
       {options.length > 1 && (
@@ -84,6 +115,34 @@ export default function CardForm({
       <div className="space-y-1">
         <Label htmlFor="card-description">Description</Label>
         <Textarea id="card-description" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      {shownFields.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {shownFields.map((f) => (
+            <div key={f.key} className="space-y-1">
+              <Label htmlFor={`card-${f.key}`}>{f.label}</Label>
+              <Input
+                id={`card-${f.key}`}
+                placeholder={f.placeholder}
+                maxLength={MAX_EXTRA_CHARS}
+                value={fields[f.key] ?? ''}
+                onChange={(e) => setFields((x) => ({ ...x, [f.key]: e.target.value }))}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="space-y-1">
+        <Label htmlFor="card-details">Details</Label>
+        <Textarea
+          id="card-details"
+          aria-describedby="card-details-hint"
+          value={details}
+          onChange={(e) => setDetails(e.target.value)}
+        />
+        <p id="card-details-hint" className="text-xs text-muted-foreground">
+          More detail than ever appears on the resume: context, numbers, tools. Auto cater may draw on it.
+        </p>
       </div>
       <div className="space-y-1">
         <Label htmlFor="card-tags">Tags (comma separated)</Label>
