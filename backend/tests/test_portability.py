@@ -226,3 +226,37 @@ def test_v2_import_does_not_convert_behavioral_cards(client):
     assert client.post("/api/import", json=doc).status_code == 200
     assert client.get("/api/interview/answers").json() == []
     assert [q for q in client.get("/api/interview/questions").json() if not q["builtin"]] == []
+
+
+def test_import_cleans_interview_questions(client):
+    doc = {"schema_version": 2, "profile": {}, "jobs": [], "cards": [],
+           "interview_questions": [
+               {"id": 1, "text": "  Padded question  ", "category": "Leadership"},
+               {"id": 2, "text": "   ", "category": "Mine"},
+               {"id": 3, "text": "Odd category", "category": "Nonsense"}],
+           "interview_answers": [
+               {"question_ref": "c:1", "situation": "kept"},
+               {"question_ref": "c:2", "situation": "dropped with its blank question"}],
+           "hidden_questions": ["c:2"]}
+    r = client.post("/api/import", json=doc)
+    assert r.status_code == 200 and r.json()["interview_answers"] == 1
+    custom = [q for q in client.get("/api/interview/questions?include_hidden=true").json()
+              if not q["builtin"]]
+    assert [(q["text"], q["category"]) for q in custom] == [
+        ("Padded question", "Leadership"), ("Odd category", "Mine")]
+    assert [a["situation"] for a in client.get("/api/interview/answers").json()] == ["kept"]
+
+
+def test_import_cleans_card_and_job_extra(client):
+    doc = {"schema_version": 2, "profile": {},
+           "jobs": [{"id": 1, "company": "A", "title": "T",
+                     "extra": {"currently_here": "Yes", "ok_to_contact": "maybe",
+                               "salary": " 90k ", "custom": "keep"}}],
+           "cards": [{"id": 2, "job_id": None, "kind": "education", "title": "U",
+                      "extra": {"gpa": " 3.7 ", "minor": "x" * 300, "notes": "", "zzz": 1}}]}
+    assert client.post("/api/import", json=doc).status_code == 200
+    assert client.get("/api/jobs").json()[0]["extra"] == {
+        "currently_here": "yes", "salary": "90k", "custom": "keep"}
+    extra = client.get("/api/cards").json()[0]["extra"]
+    assert extra["gpa"] == "3.7" and len(extra["minor"]) == 100
+    assert "notes" not in extra and extra["zzz"] == 1

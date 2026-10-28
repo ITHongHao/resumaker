@@ -29,6 +29,8 @@ test('record fields, add field menu, interview answers', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Manager name' }).click()
   await page.getByLabel('Manager name').fill('Dana Reyes')
   await page.getByRole('button', { name: 'Save job' }).click()
+  // Wait for the save to land before reading the API.
+  await expect(page.getByRole('link', { name: /Platform Engineer/ })).toBeVisible()
   const jobs = (await (await page.request.get('/api/jobs')).json()) as { title: string; extra: Record<string, string> }[]
   expect(jobs.find((j) => j.title === 'Platform Engineer')?.extra.manager_name).toBe('Dana Reyes')
 

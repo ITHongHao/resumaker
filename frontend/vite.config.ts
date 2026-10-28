@@ -2,7 +2,7 @@
 import path from 'node:path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -14,7 +14,8 @@ export default defineConfig({
     },
   },
   server: {
-    fs: { allow: ['..'] },
+    // The app's own folder, plus only the shared field registry next to it (not the whole repo).
+    fs: { allow: [searchForWorkspaceRoot(import.meta.dirname), path.resolve(import.meta.dirname, '../shared')] },
     port: 5173,
     proxy: {
       // RESUMAKER_API_URL lets the end-to-end run point the proxy at its own backend.

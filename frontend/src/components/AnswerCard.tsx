@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 
-import type { InterviewAnswer, StarParts } from '@/api'
+import type { InterviewAnswer, Job, StarParts } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 
@@ -86,11 +86,14 @@ export function StarBody({ a }: { a: StarParts }) {
 export default function AnswerCard({
   answer,
   index,
+  job,
   onUpdate,
   onDelete,
 }: {
   answer: InterviewAnswer
   index: number
+  /** The answer's job (answer.job_id), when it has one. */
+  job?: Job
   onUpdate: (id: number, v: StarParts) => Promise<void>
   onDelete: (id: number) => void
 }) {
@@ -108,6 +111,7 @@ export default function AnswerCard({
     )
   return (
     <article className="space-y-3 rounded-2xl border border-border p-4">
+      {job && <p className="text-xs text-muted-foreground">Job: {[job.title, job.company].filter(Boolean).join(', ')}</p>}
       <StarBody a={answer} />
       {answer.source_cards.length > 0 && (
         <p className="text-xs text-muted-foreground">

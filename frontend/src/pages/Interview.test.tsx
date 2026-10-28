@@ -214,6 +214,15 @@ describe('Interview', () => {
     expect(card).toHaveTextContent('source removed')
   })
 
+  it("shows an answer's job", async () => {
+    const { server, user } = await setup()
+    server.jobs.push({ id: 3, company: 'Acme', title: 'SRE', location: '', employment_type: '', start_date: '', end_date: '', manager_contact: '', reason_for_leaving: '', extra: {} })
+    server.answers.push({ id: 1, question_ref: 'b:lead-project', situation: 's', task: 't', action: 'a', result: 'r', source_card_ids: [], job_id: 3 })
+    await user.click(screen.getByRole('button', { name: Q1 }))
+    const card = await screen.findByRole('article')
+    expect(await within(card).findByText(/SRE, Acme/)).toBeInTheDocument()
+  })
+
   it('shows answered state per question', async () => {
     const { user } = await setup()
     expect(screen.getAllByText('No answer yet')).toHaveLength(2)

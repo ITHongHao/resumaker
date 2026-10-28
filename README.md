@@ -8,7 +8,7 @@ You keep a **Record**: your jobs, projects, accomplishments, education, skills a
 
 ### Record fields and the Add field menu
 
-Each kind of Record entry has the fields you would expect, such as Degree type, Field of study and GPA on education, or Employment type and Currently work here on a job. The common ones show by default. Less common ones (Minor, Honors and awards, Manager name, OK to contact, Salary, Reason for leaving, Role, Link or repo, Credential ID and so on) stay out of the way until you pick them from the **Add field** button on the form; a field that already holds a value is always shown. Select fields offer an "Other" choice with a free-text box. Some fields are printed on the resume and some are stored for your own reference only (a manager's name, a salary).
+Each kind of Record entry has the fields you would expect, such as Degree type, Field of study and GPA on education, or Employment type and Currently work here on a job. The common ones show by default. Less common ones (Minor, Honors and awards, Manager name, OK to contact, Salary, Reason for leaving, Role, Link or repo, Credential ID and so on) stay out of the way until you pick them from the **Add field** button on the form; a field that already holds a value is always shown. Employment type, Degree type and education Status offer an "Other" choice with a free-text box. Some fields are printed on the resume and some are stored for your own reference only (a manager's name, a salary).
 
 ### Interview
 
@@ -84,6 +84,8 @@ The end-to-end test starts its own backend (port 8100) and frontend (port 5273) 
 - LaTeX only (Jake's template); no Word/docx output.
 - Localhost and single user only: no accounts, no hosting or deployment, and no authentication on the API, so do not expose the port to a network.
 - Tailored resumes (applications and their versions) are not part of the JSON export; only the Record and Profile are. Back up `resumaker.db` to keep them.
+- Questions you add on the Interview tab always go in the "Mine" category; there is no category picker for them yet.
+- When old behavioral cards are moved to the Interview tab, their text and tags go into the answer's Action part, but any extra data stored on the card is not copied as notes (the original card row is kept, hidden, in the database).
 
 ## Third-party: resume template
 

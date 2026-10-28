@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { api, type AnswerDraft, type InterviewAnswer, type InterviewQuestion } from '@/api'
+import { api, type AnswerDraft, type InterviewAnswer, type InterviewQuestion, type Job } from '@/api'
 import AnswerCard, { StarBody, StarForm, emptyStar } from '@/components/AnswerCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +30,7 @@ export default function Interview() {
   const [category, setCategory] = useState('All')
   const [selected, setSelected] = useState<string | null>(null)
   const [answers, setAnswers] = useState<InterviewAnswer[]>([])
+  const [jobs, setJobs] = useState<Job[]>([])
   const [showHidden, setShowHidden] = useState(false)
   const [questionForm, setQuestionForm] = useState<{ ref: string | null; text: string } | null>(null)
   const [adding, setAdding] = useState(false)
@@ -57,6 +58,18 @@ export default function Interview() {
   useEffect(() => {
     void guard(loadQuestions)
   }, [loadQuestions])
+
+  // Jobs only name an answer's job; answers still show without them.
+  useEffect(() => {
+    let live = true
+    api
+      .listJobs()
+      .then((j) => live && setJobs(j))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [])
 
   useEffect(() => {
     selectedRef.current = selected
@@ -242,6 +255,7 @@ export default function Interview() {
                 key={a.id}
                 answer={a}
                 index={i + 1}
+                job={jobs.find((j) => j.id === a.job_id)}
                 onUpdate={async (id, v) => {
                   await api.updateAnswer(id, { situation: v.situation, task: v.task, action: v.action, result: v.result })
                   await refreshAnswers()

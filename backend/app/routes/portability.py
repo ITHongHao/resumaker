@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, SQLModel, delete, select
 
 from app.db import get_session
-from app import interview
+from app import interview, recordfields
 from app.models import (
     Card, CardBase, HiddenQuestion, InterviewAnswer, InterviewQuestion, Job, JobBase, Profile,
     ProfileBase,
@@ -107,14 +107,23 @@ def import_all(doc: ExportDoc, session: Session = Depends(get_session)):
         session.exec(delete(Card))
         session.exec(delete(Job))
         session.exec(delete(Profile))
-        session.add_all(Job(**j.model_dump()) for j in doc.jobs)
+        # Extras are cleaned exactly as the API cleans them when a job or card is saved.
+        session.add_all(Job(**{**j.model_dump(), "extra": recordfields.clean_extra("job", j.extra)})
+                        for j in doc.jobs)
         session.flush()  # jobs before the cards that reference them
-        session.add_all(Card(**c.model_dump()) for c in doc.cards)
+        session.add_all(
+            Card(**{**c.model_dump(), "extra": recordfields.clean_extra(c.kind, c.extra)})
+            for c in doc.cards)
         session.add(Profile(id=1, **doc.profile.model_dump()))
         # Custom questions get fresh ids; refs in answers and hidden are rewritten to match.
         qmap: dict[int, int] = {}
+        # A blank question is dropped (with its answers); an unknown category becomes "Mine".
         for qd in doc.interview_questions:
-            row = InterviewQuestion(text=qd.text, category=qd.category)
+            text = qd.text.strip()
+            if not text:
+                continue
+            category = qd.category if qd.category in interview.ALLOWED_CATEGORIES else "Mine"
+            row = InterviewQuestion(text=text, category=category)
             session.add(row)
             session.flush()
             qmap[qd.id] = row.id

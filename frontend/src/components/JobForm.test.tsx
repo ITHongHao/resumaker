@@ -78,4 +78,21 @@ describe('JobForm', () => {
     expect(sel.selectedOptions[0].textContent).toBe('Yes')
     expect(screen.getByLabelText('OK to contact')).toHaveValue('no')
   })
+
+  it('Employment type Other reveals a text box saved as the typed value', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn()
+    render(<JobForm initial={{ ...job, extra: {} }} onSave={onSave} onCancel={vi.fn()} />)
+    expect(screen.queryByLabelText('Employment type (other)')).toBeNull()
+    await user.selectOptions(screen.getByLabelText('Employment type'), 'Other')
+    await user.type(screen.getByLabelText('Employment type (other)'), 'Seasonal')
+    await user.click(screen.getByRole('button', { name: /save job/i }))
+    expect(onSave.mock.calls[0][0].employment_type).toBe('Seasonal')
+  })
+
+  it('a stored employment type outside the list shows as Other', () => {
+    render(<JobForm initial={{ ...job, employment_type: 'Seasonal', extra: {} }} onSave={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByLabelText('Employment type')).toHaveValue('Other')
+    expect(screen.getByLabelText('Employment type (other)')).toHaveValue('Seasonal')
+  })
 })

@@ -169,7 +169,8 @@
       "options": [
         "Graduated",
         "Attending",
-        "Expected"
+        "Expected",
+        "Other"
       ],
       "default": true,
       "printed": false

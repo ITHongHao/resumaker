@@ -122,6 +122,16 @@ describe('CardForm', () => {
     expect(onSave.mock.lastCall?.[0].extra).toEqual({ degree_type: 'Diploma' })
   })
 
+  it('education Status offers Other with a text box', async () => {
+    const user = userEvent.setup()
+    const onSave = vi.fn()
+    render(<CardForm jobless kinds={['education']} initial={{ kind: 'education', title: 'X' }} onSave={onSave} onCancel={() => {}} />)
+    await user.selectOptions(screen.getByLabelText(/^status$/i), 'Other')
+    await user.type(screen.getByLabelText(/^status \(other\)$/i), 'On leave')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    expect(onSave.mock.lastCall?.[0].extra).toEqual({ status: 'On leave' })
+  })
+
   it('a stored value outside the list shows as Other', () => {
     render(
       <CardForm jobless kinds={['education']} initial={{ kind: 'education', title: 'X', extra: { degree_type: 'Diploma' } }} onSave={() => {}} onCancel={() => {}} />,

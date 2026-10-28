@@ -2,21 +2,12 @@ import { useEffect, useState } from 'react'
 
 import type { CardDraft, CardKind } from '@/api'
 import AddFieldMenu from '@/components/AddFieldMenu'
+import FieldInput, { selectClass } from '@/components/FieldInput'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  type FieldDef,
-  fieldsFor,
-  JOBLESS_ACCOMPLISHMENT,
-  KNOWN_KEYS,
-  knownExtra,
-  MAX_EXTRA_CHARS,
-  TITLE_LABELS,
-  visibleKeys,
-  YESNO_OPTIONS,
-} from '@/lib/recordFields'
+import { fieldsFor, JOBLESS_ACCOMPLISHMENT, KNOWN_KEYS, knownExtra, TITLE_LABELS, visibleKeys } from '@/lib/recordFields'
 
 export const KIND_LABELS: Record<CardKind, string> = {
   project: 'Project',
@@ -27,85 +18,9 @@ export const KIND_LABELS: Record<CardKind, string> = {
   behavioral: 'Behavioral answer',
 }
 
-const selectClass =
-  'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
-
 /** `extra` keys no section has a field for (from an import); they are kept as they are. */
 function otherExtra(extra: Record<string, unknown> | undefined): Record<string, unknown> {
   return Object.fromEntries(Object.entries(extra ?? {}).filter(([k]) => !KNOWN_KEYS.has(k)))
-}
-
-const OTHER = 'Other'
-
-function FieldInput({
-  def,
-  value,
-  otherPicked,
-  onChange,
-  onOtherPicked,
-}: {
-  def: FieldDef
-  value: string
-  otherPicked: boolean
-  onChange: (v: string) => void
-  onOtherPicked: (picked: boolean) => void
-}) {
-  const id = `card-${def.key}`
-  if (def.type === 'text') {
-    return <Input id={id} placeholder={def.placeholder} maxLength={MAX_EXTRA_CHARS} value={value} onChange={(e) => onChange(e.target.value)} />
-  }
-  if (def.type === 'yesno') {
-    return (
-      <select id={id} className={selectClass} value={value.trim().toLowerCase()} onChange={(e) => onChange(e.target.value)}>
-        <option value="" />
-        {YESNO_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    )
-  }
-  const options = def.options ?? []
-  const hasOther = options.includes(OTHER)
-  const typed = hasOther && (otherPicked || (value !== '' && !options.includes(value)))
-  // A stored value no longer in the list (a list without "Other") stays selectable.
-  const stray = !hasOther && value !== '' && !options.includes(value)
-  return (
-    <div className="space-y-1.5">
-      <select
-        id={id}
-        className={selectClass}
-        value={typed ? OTHER : value}
-        onChange={(e) => {
-          const v = e.target.value
-          if (v === OTHER) {
-            onOtherPicked(true)
-            onChange('')
-          } else {
-            onOtherPicked(false)
-            onChange(v)
-          }
-        }}
-      >
-        <option value="" />
-        {stray && <option value={value}>{value}</option>}
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-      {typed && (
-        <Input
-          aria-label={`${def.label} (other)`}
-          maxLength={MAX_EXTRA_CHARS}
-          value={options.includes(value) ? '' : value}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
-    </div>
-  )
 }
 
 export function parseTags(s: string): string[] {
@@ -215,6 +130,7 @@ export default function CardForm({
             <div key={f.key} className="space-y-1">
               <Label htmlFor={`card-${f.key}`}>{f.label}</Label>
               <FieldInput
+                id={`card-${f.key}`}
                 def={f}
                 value={fields[f.key] ?? ''}
                 otherPicked={otherPicked.includes(f.key)}

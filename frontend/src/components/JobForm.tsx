@@ -2,34 +2,13 @@ import { useEffect, useState } from 'react'
 
 import type { Job, JobInput } from '@/api'
 import AddFieldMenu from '@/components/AddFieldMenu'
+import FieldInput from '@/components/FieldInput'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { type FieldDef, FIELDS, formValue, MAX_EXTRA_CHARS, visibleKeys, YESNO_OPTIONS } from '@/lib/recordFields'
+import { FIELDS, formValue, MAX_EXTRA_CHARS, visibleKeys } from '@/lib/recordFields'
 
 const DEFS = FIELDS.job
 const COLUMNS = DEFS.filter((f) => f.column).map((f) => f.key)
-const selectClass =
-  'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
-
-function JobField({ def, value, onChange }: { def: FieldDef; value: string; onChange: (v: string) => void }) {
-  const id = `job-${def.key}`
-  if (def.type === 'text')
-    return <Input id={id} placeholder={def.placeholder} maxLength={def.column ? undefined : MAX_EXTRA_CHARS} value={value} onChange={(e) => onChange(e.target.value)} />
-  const options = def.type === 'yesno' ? YESNO_OPTIONS : (def.options ?? []).map((o) => ({ value: o, label: o }))
-  const stray = value !== '' && !options.some((o) => o.value === value)
-  return (
-    <select id={id} className={selectClass} value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="" />
-      {stray && <option value={value}>{value}</option>}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  )
-}
 
 export default function JobForm({
   initial,
@@ -51,7 +30,9 @@ export default function JobForm({
     }
     return out
   })
+  // Fields picked from the Add field menu, and selects whose "Other" box is open.
   const [added, setAdded] = useState<string[]>([])
+  const [otherPicked, setOtherPicked] = useState<string[]>([])
   const [focusKey, setFocusKey] = useState<string | null>(null)
   useEffect(() => {
     if (focusKey) document.getElementById(`job-${focusKey}`)?.focus()
@@ -81,7 +62,16 @@ export default function JobForm({
         {shownDefs.map((f) => (
           <div key={f.key} className="space-y-1">
             <Label htmlFor={`job-${f.key}`}>{f.label}</Label>
-            <JobField def={f} value={v[f.key]} onChange={(x) => setV((s) => ({ ...s, [f.key]: x }))} />
+            <FieldInput
+              id={`job-${f.key}`}
+              def={f}
+              value={v[f.key]}
+              // Job columns (company, title and so on) are not capped like stored-only fields.
+              maxLength={f.column ? undefined : MAX_EXTRA_CHARS}
+              otherPicked={otherPicked.includes(f.key)}
+              onChange={(x) => setV((s) => ({ ...s, [f.key]: x }))}
+              onOtherPicked={(p) => setOtherPicked((o) => (p ? [...o, f.key] : o.filter((k) => k !== f.key)))}
+            />
           </div>
         ))}
       </div>
