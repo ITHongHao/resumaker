@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApplicationDetail } from '@/api'
 import Editor from './Editor'
 import { installFakeApi, type FakeServer } from '@/test/fakeApi'
-import { TEX, detail, docText, offsetAfter, typeAt } from '@/test/editorFixtures'
+import { SUGGESTION_2, TEX, detail, docText, offsetAfter, typeAt } from '@/test/editorFixtures'
 
 beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:pdf')
@@ -84,13 +84,17 @@ describe('Editor', () => {
   it('rejecting removes the decoration only', async () => {
     const { server } = setup()
     await loaded()
+    await waitFor(() => expect(server.calls.some((c) => c.path === '/api/latex/compile')).toBe(true))
     const before = server.calls.length
     await userEvent.setup().click(screen.getByRole('button', { name: /reject/i }))
     expect(document.querySelector('.cm-sugg-old')).toBeNull()
     expect(docText()).toBe(TEX)
     expect(screen.queryByText(/unsaved changes/i)).toBeNull()
-    await new Promise((r) => setTimeout(r, 600))
-    expect(server.calls.slice(before).filter((c) => c.method !== 'GET')).toEqual([])
+    await new Promise((r) => setTimeout(r, 1000))
+    // The text is untouched: no compile. Only the projection is re-scored, with nothing shown.
+    const after = server.calls.slice(before).filter((c) => c.method !== 'GET')
+    expect(after.map((c) => c.path)).toEqual(['/api/applications/1/score'])
+    expect(after[0].body).toEqual({ tex: TEX, active: [] })
   })
 
   it('clicking a chip highlights its lines', async () => {
@@ -157,6 +161,67 @@ describe('Editor', () => {
       await new Promise((r) => setTimeout(r, 20))
     })
     expect(meter()).toHaveTextContent('88')
+  })
+
+  describe('with two suggestions', () => {
+    // The fake server projects 62 + 14 for bullet 1 (PostgreSQL) + 10 for bullet 0 (Kubernetes),
+    // counting only the bullet indexes the editor says it shows.
+    const two = () =>
+      setup(detail({ suggestions: [detail().suggestions[0], SUGGESTION_2], potential: 86 }), (r) => {
+        if (r.path !== '/api/applications/1/score') return undefined
+        const active: number[] = r.body.active ?? [0, 1]
+        const potential = 62 + (active.includes(1) ? 14 : 0) + (active.includes(0) ? 10 : 0)
+        return { body: { score: 62, matches: detail().matches, potential } }
+      })
+
+    it('rejecting one re-scores with only the remaining index', async () => {
+      const { server } = two()
+      await loaded()
+      expect(screen.getByText('→ 86 if all accepted')).toBeInTheDocument()
+      expect(scoreCalls(server)).toHaveLength(0)
+      await userEvent.setup().click(screen.getByRole('button', { name: /reject suggestion adding PostgreSQL/i }))
+      await waitFor(() => expect(screen.getByText('→ 72 if all accepted')).toBeInTheDocument())
+      expect(scoreCalls(server)).toHaveLength(1)
+      expect(scoreCalls(server)[0].body).toEqual({ tex: TEX, active: [0] })
+      await new Promise((r) => setTimeout(r, 600))
+      expect(scoreCalls(server)).toHaveLength(1)
+    })
+
+    it('editing a suggested line away re-scores without its index', async () => {
+      const { server } = two()
+      await loaded()
+      typeAt(offsetAfter('Built a TypeScript web'), ' and mobile')
+      await waitFor(() => expect(scoreCalls(server)).toHaveLength(1))
+      expect(scoreCalls(server)[0].body.active).toEqual([0])
+      expect(scoreCalls(server)[0].body.tex).toContain('web and mobile app')
+      await waitFor(() => expect(screen.getByText('→ 72 if all accepted')).toBeInTheDocument())
+    })
+
+    it('rejecting every suggestion hides the projection', async () => {
+      const { server } = two()
+      await loaded()
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: /reject suggestion adding PostgreSQL/i }))
+      await user.click(screen.getByRole('button', { name: /reject suggestion adding Kubernetes/i }))
+      await waitFor(() => expect(scoreCalls(server).length).toBeGreaterThan(0))
+      await new Promise((r) => setTimeout(r, 600))
+      // Two quick rejects are one debounced request.
+      expect(scoreCalls(server)).toHaveLength(1)
+      expect(scoreCalls(server)[0].body.active).toEqual([])
+      expect(screen.queryByText(/if all accepted/)).toBeNull()
+    })
+
+    it('a reject and a keystroke in one burst send one request', async () => {
+      const { server } = two()
+      await loaded()
+      await userEvent.setup().click(screen.getByRole('button', { name: /reject suggestion adding Kubernetes/i }))
+      typeAt(offsetAfter('\\section{Experience}'), ' ')
+      await waitFor(() => expect(scoreCalls(server)).toHaveLength(1))
+      await new Promise((r) => setTimeout(r, 600))
+      expect(scoreCalls(server)).toHaveLength(1)
+      expect(scoreCalls(server)[0].body.active).toEqual([1])
+      expect(scoreCalls(server)[0].body.tex).toContain('\\section{Experience} ')
+    })
   })
 
   it('uncovered requirement offers Ask AI', async () => {

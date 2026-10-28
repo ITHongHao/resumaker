@@ -458,6 +458,62 @@ def test_score_endpoint_scores_posted_tex_without_ai(client, use_llm, record):
     assert len(llm.calls) == 2
 
 
+def _two_suggestions(client, use_llm, record):
+    """An application whose stored suggestions rewrite both bullets: bullet 1 adds PostgreSQL
+    (from cater), bullet 0 adds Kubernetes (written straight into the version for this test)."""
+    llm = use_llm(FakeLLM(*good_replies(record)))
+    app_id = client.post("/api/applications", json={"posting_id": add_posting(POSTING_REQS)}).json()["id"]
+    with Session(db.get_engine()) as s:
+        v = s.exec(select(ResumeVersion).where(ResumeVersion.application_id == app_id)).one()
+        v.suggestions = [*v.suggestions, {
+            "bullet_index": 0,
+            "old": "Built Python Airflow pipelines that cut report time by 40%",
+            "new": "Built Python Airflow pipelines on Kubernetes that cut report time by 40%",
+            "terms": ["Kubernetes"], "source_card_id": record["pipelines"]["id"], "score_delta": 0,
+        }]
+        s.add(v)
+        s.commit()
+    tex = client.get(f"/api/applications/{app_id}").json()["version"]["tex"]
+    return llm, app_id, tex
+
+
+def test_score_active_limits_potential_to_shown_suggestions(client, use_llm, record):
+    llm, app_id, tex = _two_suggestions(client, use_llm, record)
+    pg = tex.replace("Built a TypeScript web app}", "Built a TypeScript web app backed by PostgreSQL}")
+    k8s = tex.replace("pipelines that cut", "pipelines on Kubernetes that cut")
+
+    def post(**extra):
+        r = client.post(f"/api/applications/{app_id}/score", json={"tex": tex, **extra})
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    def score_of(t):
+        return client.post(f"/api/applications/{app_id}/score", json={"tex": t}).json()["score"]
+
+    base = post()
+    # Omitted: every stored suggestion still in the text counts (unchanged behavior).
+    assert base["potential"] == score_of(pg.replace("pipelines that cut", "pipelines on Kubernetes that cut"))
+    assert base["potential"] > score_of(pg) > base["score"]
+    # Only the listed bullet indexes count.
+    assert post(active=[1])["potential"] == score_of(pg)
+    assert post(active=[0])["potential"] == score_of(k8s)
+    assert post(active=[0, 1])["potential"] == base["potential"]
+    # None shown: nothing to project.
+    assert post(active=[])["potential"] == base["score"]
+    # Unknown indexes are ignored, not an error.
+    assert post(active=[1, 99, -3])["potential"] == score_of(pg)
+    # Score and matches never depend on `active`.
+    assert post(active=[])["score"] == base["score"] and post(active=[])["matches"] == base["matches"]
+    assert len(llm.calls) == 2  # only the cater + suggest calls from creation
+
+
+@pytest.mark.parametrize("active", [["1"], [1.5], "1", [None], {"0": 1}])
+def test_score_active_must_be_a_list_of_ints(client, use_llm, record, active):
+    _, app_id, tex = _two_suggestions(client, use_llm, record)
+    r = client.post(f"/api/applications/{app_id}/score", json={"tex": tex, "active": active})
+    assert r.status_code == 422
+
+
 def test_status_filter_and_search(client, use_llm, record):
     p, w = record["pipelines"]["id"], record["webapp"]["id"]
     use_llm(FakeLLM(

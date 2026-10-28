@@ -272,8 +272,10 @@ export const api = {
   getApplication: (id: number) => request<ApplicationDetail>('GET', `/api/applications/${id}`),
   updateApplication: (id: number, status: ApplicationStatus) =>
     request<{ id: number; status: ApplicationStatus }>('PATCH', `/api/applications/${id}`, { status }),
-  /** Deterministic live score of unsaved tex. Never an AI call. */
-  scoreTex: (id: number, tex: string) => request<ScoreOut>('POST', `/api/applications/${id}/score`, { tex }),
+  /** Deterministic live score of unsaved tex. Never an AI call. `active` (bullet indexes of
+   *  the suggestions the editor shows) limits which suggestions count toward `potential`. */
+  scoreTex: (id: number, tex: string, active?: number[]) =>
+    request<ScoreOut>('POST', `/api/applications/${id}/score`, active === undefined ? { tex } : { tex, active }),
   saveVersion: (id: number, tex: string) =>
     request<ResumeVersion>('POST', `/api/applications/${id}/versions`, { tex }),
   compileLatex,

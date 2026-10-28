@@ -25,6 +25,18 @@ export const SUGGESTION: Suggestion = {
   score_delta: 14,
 }
 
+/** A second suggestion, on bullet 0 (the Airflow line). */
+export const SUGGESTION_2: Suggestion = {
+  bullet_index: 0,
+  old: 'Built Python Airflow pipelines that cut report time by 40%',
+  new: 'Built Python Airflow pipelines on Kubernetes that cut report time by 40%',
+  old_tex: 'Built Python Airflow pipelines that cut report time by 40\\%',
+  new_tex: 'Built Python Airflow pipelines on Kubernetes that cut report time by 40\\%',
+  terms: ['Kubernetes'],
+  source_card_id: 4,
+  score_delta: 10,
+}
+
 export function detail(over: Partial<ApplicationDetail> = {}): ApplicationDetail {
   return {
     id: 1,

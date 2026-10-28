@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, StrictInt
 from sqlmodel import Session, SQLModel, col, select
 
 from app.ai.provider import LLM, AIError
@@ -60,6 +60,13 @@ class CreateIn(BaseModel):
 
 class TexIn(BaseModel):
     tex: str = Field(max_length=MAX_TEX_CHARS)
+
+
+class ScoreIn(TexIn):
+    # Bullet indexes of the suggestions the editor currently shows (not rejected, line still
+    # intact). When given, only those count toward `potential`; unknown indexes are ignored.
+    # Omitted: every stored suggestion still in the text counts.
+    active: list[StrictInt] | None = Field(default=None, max_length=1000)
 
 
 class StatusPatch(SQLModel):
@@ -303,11 +310,14 @@ def save_version(app_id: int, body: TexIn, session: Session = Depends(get_sessio
 
 
 @router.post("/{app_id}/score", response_model=ScoreOut)
-def score_tex(app_id: int, body: TexIn, session: Session = Depends(get_session)):
+def score_tex(app_id: int, body: ScoreIn, session: Session = Depends(get_session)):
     """Live score of an unsaved tex for the editor. Deterministic; no AI call."""
     application = _application(session, app_id)
     reqs = requirements_of(session.get(Posting, application.posting_id))
     result = score(reqs, body.tex)
     suggestions = _suggestions(_latest(session, app_id))
+    if body.active is not None:
+        shown = set(body.active)
+        suggestions = [s for s in suggestions if s.bullet_index in shown]
     return ScoreOut(score=result.score, matches=result.matches,
                     potential=potential(reqs, body.tex, suggestions))

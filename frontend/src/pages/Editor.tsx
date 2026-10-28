@@ -29,6 +29,10 @@ const STATUSES: { value: ApplicationStatus; label: string }[] = [
   { value: 'rejected', label: 'Rejected' },
 ]
 
+function scoreKey(active: number[], tex: string): string {
+  return `${[...active].sort((a, b) => a - b).join(',')}\u0000${tex}`
+}
+
 function pdfName(app: ApplicationDetail): string {
   const base = [app.posting.title, app.posting.company].filter(Boolean).join(' ') || `resume-${app.id}`
   return `${base.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'resume'}.pdf`
@@ -66,7 +70,8 @@ export default function Editor() {
   const [busy, setBusy] = useState<'save' | 'export' | null>(null)
   const [notice, setNotice] = useState('')
   const [actionError, setActionError] = useState('')
-  // Last text sent to /score, and a counter so only the newest response is applied.
+  // Last (shown suggestions, text) sent to /score, and a counter so only the newest response
+  // is applied.
   const requested = useRef<string | null>(null)
   const scoreSeq = useRef(0)
 
@@ -82,7 +87,9 @@ export default function Editor() {
         setVersion(a.version.version)
         setScore({ score: a.score, matches: a.matches, potential: a.potential })
         setStatus(a.status)
-        requested.current = a.version.tex
+        // The loaded potential counts every suggestion the server still finds in the text. If
+        // the editor shows a different set, the key differs and one re-score corrects it.
+        requested.current = scoreKey(a.suggestions.map((x) => x.bullet_index), a.version.tex)
       })
       .catch((e: Error) => live && setLoadError(e.message))
     api
@@ -96,22 +103,41 @@ export default function Editor() {
     }
   }, [appId])
 
-  // Debounced live score. Each request is numbered; a response to an older request is dropped
-  // so a slow old answer never overwrites a newer one.
+  const suggestions = useMemo(
+    () => (app?.suggestions ?? []).filter((s) => !rejected.includes(s)),
+    [app, rejected],
+  )
+  const lines = useMemo(() => tex.split('\n'), [tex])
+  // Bullet indexes of the suggestions drawn in the editor right now: not rejected, and their
+  // line still reads exactly \resumeItem{old}. Only these count toward "→ N if all accepted".
+  const shownKey = useMemo(() => {
+    const at = locateSuggestions(lines, suggestions)
+    return suggestions
+      .filter((_, k) => at[k] >= 0)
+      .map((s) => s.bullet_index)
+      .sort((a, b) => a - b)
+      .join(',')
+  }, [lines, suggestions])
+
+  // Debounced live score, re-run when the text or the shown suggestions change (a Reject, or
+  // a suggestion's line edited away). Each request is numbered; a response to an older
+  // request is dropped so a slow old answer never overwrites a newer one.
   useEffect(() => {
-    if (app === null || tex === requested.current) return
+    const active = shownKey ? shownKey.split(',').map(Number) : []
+    const key = scoreKey(active, tex)
+    if (app === null || key === requested.current) return
     const timer = setTimeout(() => {
-      requested.current = tex
+      requested.current = key
       const mine = ++scoreSeq.current
       api
-        .scoreTex(appId, tex)
+        .scoreTex(appId, tex, active)
         .then((r) => mine === scoreSeq.current && setScore(r))
         .catch(() => {
           /* keep showing the last score */
         })
     }, SCORE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [tex, app, appId])
+  }, [tex, shownKey, app, appId])
 
   const dirty = app !== null && tex !== savedTex
 
@@ -129,15 +155,6 @@ export default function Editor() {
     ({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname,
   )
 
-  const suggestions = useMemo(
-    () => (app?.suggestions ?? []).filter((s) => !rejected.includes(s)),
-    [app, rejected],
-  )
-  const lines = useMemo(() => tex.split('\n'), [tex])
-  const shown = useMemo(
-    () => locateSuggestions(lines, suggestions).filter((at) => at >= 0).length,
-    [lines, suggestions],
-  )
   const hits = useMemo(
     () => (selected ? linesForTerm(lines, selected, suggestions).length : null),
     [lines, selected, suggestions],
@@ -214,9 +231,9 @@ export default function Editor() {
     )
   if (!app || !score) return <p className="text-muted-foreground">Loading…</p>
 
-  // The projection comes from the server; with every suggestion accepted, rejected or edited
-  // away, there is nothing left to project.
-  const potential = shown > 0 ? score.potential : score.score
+  // The projection comes from the server, counting only the shown suggestions; with none
+  // shown there is nothing to project.
+  const potential = shownKey ? score.potential : score.score
 
   return (
     <div className="space-y-4">

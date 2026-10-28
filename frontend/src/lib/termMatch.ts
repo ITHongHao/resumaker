@@ -89,7 +89,9 @@ export const itemLine = (textTex: string) => `${ITEM_PREFIX}${textTex}}`
 /**
  * The 0-based line index holding each suggestion's bullet, or -1 when its `old` text is no
  * longer on a line of its own (accepted or hand-edited). The bullet_index-th \resumeItem line
- * is preferred; otherwise the first unclaimed line with exactly that text.
+ * is used when it still reads exactly \resumeItem{old}. Otherwise (bullets added or moved) the
+ * one unclaimed line with exactly that text is used; when several lines have that text the
+ * suggestion is dropped rather than guessed onto what may be another job's bullet.
  */
 export function locateSuggestions(lines: string[], suggestions: Suggestion[]): number[] {
   const items = lines.flatMap((l, i) => (l.trim().startsWith(ITEM_PREFIX) ? [i] : []))
@@ -97,10 +99,13 @@ export function locateSuggestions(lines: string[], suggestions: Suggestion[]): n
   return suggestions.map((s) => {
     const target = itemLine(s.old_tex)
     const preferred = items[s.bullet_index]
-    const at =
-      preferred !== undefined && !claimed.has(preferred) && lines[preferred].trim() === target
-        ? preferred
-        : items.find((i) => !claimed.has(i) && lines[i].trim() === target) ?? -1
+    let at = -1
+    if (preferred !== undefined && !claimed.has(preferred) && lines[preferred].trim() === target) {
+      at = preferred
+    } else {
+      const candidates = items.filter((i) => !claimed.has(i) && lines[i].trim() === target)
+      if (candidates.length === 1) at = candidates[0]
+    }
     if (at >= 0) claimed.add(at)
     return at
   })
