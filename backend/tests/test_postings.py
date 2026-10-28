@@ -243,3 +243,49 @@ def test_fetch_errors():
     for h in cases:
         with pytest.raises(FetchError):
             fetch_url("https://example.com", client=mock_client(h))
+
+
+# --- requirement normalization -----------------------------------------
+
+
+def _reply(reqs):
+    return json.dumps({"title": "T", "company": "C", "requirements": reqs})
+
+
+def _req(term, weight=1, kind="skill"):
+    return {"term": term, "kind": kind, "weight": weight}
+
+
+def test_blank_term_only_reply_returns_fallback_and_saves_nothing(client, use):
+    use(FakeLLM(_reply([_req(""), _req("   ")])))
+    r = client.post("/api/postings", data={"text": "x"})
+    assert r.status_code == 422 and r.json()["fallback"] == "paste_text"
+    assert client.get("/api/postings").json() == []
+
+
+def test_whitespace_term_dropped_valid_kept():
+    r = extract_requirements(FakeLLM(_reply([_req("  "), _req(" Go ", 2)])), "t", [])
+    assert [(x.term, x.weight) for x in r.requirements] == [("Go", 2)]
+
+
+def test_case_insensitive_duplicates_collapse_to_highest_weight():
+    reqs = [_req("Python", 1), _req("SQL", 2), _req("python", 3), _req("PYTHON ", 2)]
+    r = extract_requirements(FakeLLM(_reply(reqs)), "t", [])
+    assert [(x.term, x.weight) for x in r.requirements] == [("Python", 3), ("SQL", 2)]
+
+
+def test_requirements_capped_at_50_keeping_highest_weight():
+    reqs = [_req(f"t{i}", 3 if i >= 60 else 1) for i in range(80)]
+    r = extract_requirements(FakeLLM(_reply(reqs)), "t", [])
+    terms = [x.term for x in r.requirements]
+    assert len(terms) == 50
+    assert all(f"t{i}" in terms for i in range(60, 80))  # all 20 weight-3 kept
+    assert terms == sorted(terms, key=lambda t: int(t[1:]))  # original order
+
+
+def test_saved_posting_never_contains_blank_term(client, use):
+    use(FakeLLM(_reply([_req(""), _req(" Rust "), _req("rust", 3), _req("\t")])))
+    body = client.post("/api/postings", data={"text": "x"}).json()
+    assert body["requirements"] == [{"term": "Rust", "kind": "skill", "weight": 3}]
+    saved = client.get(f"/api/postings/{body['id']}").json()
+    assert all(r["term"].strip() for r in saved["requirements"])

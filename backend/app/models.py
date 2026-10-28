@@ -1,6 +1,7 @@
 from typing import Literal
 
 from pydantic import Field as PydanticField
+from pydantic import field_validator
 from sqlalchemy import JSON, Column, String
 from sqlmodel import Field, SQLModel
 
@@ -98,7 +99,12 @@ class AppSettings(SQLModel, table=True):
 
 
 class Requirement(SQLModel):
-    term: str
+    @field_validator("term", mode="before")
+    @classmethod
+    def _strip_term(cls, v):
+        return v.strip() if isinstance(v, str) else v
+
+    term: str = PydanticField(min_length=1)
     kind: Literal["skill", "tool", "responsibility", "qualification"]
     weight: int = PydanticField(ge=1, le=3)
 

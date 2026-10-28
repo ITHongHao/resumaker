@@ -7,6 +7,7 @@ from app.models import Requirement
 
 # Posting text sent to the model is truncated to this many characters.
 MAX_PROMPT_CHARS = 20_000
+MAX_REQUIREMENTS = 50
 
 SYSTEM_PROMPT = """You extract the requirements from a job posting for a job seeker's resume tailoring tool.
 
@@ -53,6 +54,26 @@ class ExtractedPosting(BaseModel):
     requirements: list[Requirement] = []
 
 
+def _clean(reqs: list[Requirement]) -> list[Requirement]:
+    """Dedupe case-insensitively (first kept, highest weight wins), then cap at MAX_REQUIREMENTS
+    keeping the highest weights in original order."""
+    seen: dict[str, Requirement] = {}
+    for r in reqs:
+        key = r.term.strip().casefold()
+        if not key:
+            continue
+        if key in seen:
+            seen[key].weight = max(seen[key].weight, r.weight)
+        else:
+            seen[key] = Requirement(term=r.term.strip(), kind=r.kind, weight=r.weight)
+    out = list(seen.values())
+    if len(out) > MAX_REQUIREMENTS:
+        # sort is stable, so ties keep original order
+        keep = {id(r) for r in sorted(out, key=lambda r: -r.weight)[:MAX_REQUIREMENTS]}
+        out = [r for r in out if id(r) in keep]
+    return out
+
+
 def extract_requirements(llm: LLM, text: str | None, images: list[bytes]) -> ExtractedPosting:
     parts = []
     if text:
@@ -61,6 +82,16 @@ def extract_requirements(llm: LLM, text: str | None, images: list[bytes]) -> Ext
         parts.append("The job posting is in the attached image(s).")
     raw = llm.complete(SYSTEM_PROMPT, "\n\n".join(parts), images=images, json_schema=RESPONSE_SCHEMA)
     try:
-        return ExtractedPosting.model_validate(json.loads(raw))
+        data = json.loads(raw)
+        if isinstance(data, dict) and isinstance(data.get("requirements"), list):
+            # Blank terms are dropped here (not an AI error); other malformed items still fail validation.
+            data["requirements"] = [
+                r
+                for r in data["requirements"]
+                if not (isinstance(r, dict) and isinstance(r.get("term"), str) and not r["term"].strip())
+            ]
+        result = ExtractedPosting.model_validate(data)
     except (ValueError, ValidationError):
         raise AIError("The AI returned a response that could not be understood.") from None
+    result.requirements = _clean(result.requirements)
+    return result
