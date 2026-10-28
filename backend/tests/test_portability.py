@@ -12,7 +12,7 @@ def test_export_then_import_restores_record(client):
     exported = client.get("/api/export")
     assert exported.status_code == 200
     doc = exported.json()
-    assert doc["schema_version"] == 1
+    assert doc["schema_version"] == 2
     assert "sk-zzz" not in exported.text and "settings" not in doc
     jobs, cards = client.get("/api/jobs").json(), client.get("/api/cards").json()
     profile = client.get("/api/profile").json()
@@ -67,3 +67,96 @@ def test_old_export_without_job_extra_still_imports(client):
            "jobs": [{"id": 1, "company": "A", "title": "T"}]}
     assert client.post("/api/import", json=doc).status_code == 200
     assert client.get("/api/jobs").json()[0]["extra"] == {}
+
+
+def _seed_interview(client):
+    job = client.post("/api/jobs", json={"company": "Acme", "title": "Eng",
+                                         "extra": {"salary": "90k"}}).json()
+    card = client.post("/api/cards", json={"kind": "project", "title": "Search"}).json()
+    q = client.post("/api/interview/questions", json={"text": "Mine?", "category": "Mine"}).json()
+    for s in ("one", "two"):
+        client.post("/api/interview/answers", json={
+            "question_ref": q["ref"], "situation": s, "source_card_ids": [card["id"]],
+            "job_id": job["id"]})
+    return q, card, job
+
+
+def _builtin_ref(client):
+    return next(r["ref"] for r in client.get("/api/interview/questions").json() if r.get("builtin"))
+
+
+def test_export_v2_roundtrip_with_interview(client):
+    q, card, job = _seed_interview(client)
+    bref = _builtin_ref(client)
+    client.put(f"/api/interview/questions/{bref}/hidden", json={"hidden": True})
+    client.post("/api/interview/answers", json={"question_ref": bref, "action": "did"})
+    doc = client.get("/api/export").json()
+    assert doc["schema_version"] == 2
+    assert doc["jobs"][0]["extra"] == {"salary": "90k"}
+    assert len(doc["interview_questions"]) == 1 and len(doc["interview_answers"]) == 3
+    assert doc["hidden_questions"] == [bref]
+    qs = client.get("/api/interview/questions?include_hidden=true").json()
+    ans = client.get("/api/interview/answers").json()
+    client.delete(f"/api/jobs/{job['id']}")
+    client.delete(f"/api/interview/questions/{q['id']}")
+    client.put(f"/api/interview/questions/{bref}/hidden", json={"hidden": False})
+    assert client.post("/api/import", json=doc).status_code == 200
+    assert client.get("/api/interview/questions?include_hidden=true").json() == qs
+    assert client.get("/api/interview/answers").json() == ans
+    assert client.get("/api/export").json() == doc
+
+
+def test_v1_export_still_imports(client):
+    _seed_interview(client)
+    doc = {"schema_version": 1, "profile": {"name": "Ada"}, "jobs": [
+        {"id": 1, "company": "A", "title": "T"}], "cards": [
+        {"id": 2, "job_id": 1, "kind": "skill", "title": "Py"}]}
+    assert client.post("/api/import", json=doc).status_code == 200
+    assert client.get("/api/jobs").json()[0]["company"] == "A"
+    assert client.get("/api/cards").json()[0]["title"] == "Py"
+    assert client.get("/api/interview/answers").json() == []
+    assert [r for r in client.get("/api/interview/questions").json() if not r.get("builtin")] == []
+
+
+def test_import_rejects_unknown_version_3(client):
+    doc = client.get("/api/export").json()
+    assert client.post("/api/import", json={**doc, "schema_version": 3}).status_code == 422
+
+
+def test_import_remaps_custom_question_refs(client):
+    for t in ("a", "b", "c"):  # advance the autoincrement past 7 and beyond
+        client.post("/api/interview/questions", json={"text": t})
+    bref = _builtin_ref(client)
+    doc = {"schema_version": 2, "profile": {},
+           "jobs": [{"id": 1, "company": "A", "title": "T"}],
+           "cards": [{"id": 5, "kind": "skill", "title": "Py"}],
+           "interview_questions": [{"id": 7, "text": "Seven?", "category": "Mine"}],
+           "interview_answers": [
+               {"id": 1, "question_ref": "c:7", "situation": "s", "source_card_ids": [5, 99],
+                "job_id": 1},
+               {"id": 2, "question_ref": "c:8", "situation": "orphan"},
+               {"id": 3, "question_ref": "b:nope"},
+               {"id": 4, "question_ref": bref, "job_id": 42}],
+           "hidden_questions": [bref, "b:nope", "c:7", "c:9"]}
+    assert client.post("/api/import", json=doc).status_code == 200
+    custom = [r for r in client.get("/api/interview/questions?include_hidden=true").json()
+              if not r.get("builtin")]
+    assert len(custom) == 1 and custom[0]["text"] == "Seven?"
+    new_ref = custom[0]["ref"]
+    assert new_ref != "c:7"
+    ans = client.get("/api/interview/answers").json()
+    assert sorted(a["question_ref"] for a in ans) == sorted([new_ref, bref])
+    a1 = next(a for a in ans if a["question_ref"] == new_ref)
+    assert a1["source_card_ids"] == [5] and a1["job_id"] == 1
+    assert next(a for a in ans if a["question_ref"] == bref)["job_id"] is None
+    exported = client.get("/api/export").json()
+    assert sorted(exported["hidden_questions"]) == sorted([bref, new_ref])
+
+
+def test_import_interview_failure_leaves_interview_unchanged(client):
+    q, card, job = _seed_interview(client)
+    before = client.get("/api/interview/answers").json()
+    doc = client.get("/api/export").json()
+    bad = {**doc, "interview_questions": doc["interview_questions"] * 2}  # duplicate ids
+    assert client.post("/api/import", json=bad).status_code == 422
+    assert client.get("/api/interview/answers").json() == before
