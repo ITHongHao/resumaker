@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.db import init_db
 from app.hostguard import HostOriginGuard
-from app.routes import ai, applications, latex, portability, postings, profile, record, settings
+from app.routes import ai, applications, interview, latex, portability, postings, profile, record, settings
 
 
 @asynccontextmanager
@@ -36,6 +36,7 @@ async def validation_error(_: Request, exc: RequestValidationError) -> JSONRespo
 
 app.include_router(ai.router)
 app.include_router(applications.router)
+app.include_router(interview.router)
 app.include_router(latex.router)
 app.include_router(postings.router)
 app.include_router(record.router)

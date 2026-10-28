@@ -174,3 +174,28 @@ class ResumeVersion(SQLModel, table=True):
     suggestions: list[dict] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     record_hash: str
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class InterviewQuestion(SQLModel, table=True):
+    """A user-written interview question (built-in ones live in app.interview, not here)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    text: str
+    category: str = "Mine"
+
+
+class InterviewAnswer(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    # "b:<key>" for a built-in question, "c:<id>" for a custom one.
+    question_ref: str = Field(index=True)
+    situation: str = ""
+    task: str = ""
+    action: str = ""
+    result: str = ""
+    source_card_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    job_id: int | None = Field(default=None, foreign_key="job.id", ondelete="SET NULL")
+    created_at: str = ""
+
+
+class HiddenQuestion(SQLModel, table=True):
+    ref: str = Field(primary_key=True)
