@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useBlocker, useParams } from 'react-router-dom'
+import { Link, useBlocker, useNavigate, useParams } from 'react-router-dom'
 
 import {
   api,
+  ApiError,
   CompileFailure,
   type ApplicationDetail,
   type ApplicationStatus,
@@ -54,8 +55,21 @@ function download(blob: Blob, name: string) {
  * and a live PDF preview. Nothing here calls the AI on its own: typing only triggers the
  * debounced deterministic /score and the debounced /latex/compile.
  */
-export default function Editor() {
+const REDRAFT_NOTE =
+  'Drafting again makes a new application for this posting from your current Record (this calls the AI). It keeps this one as it is.'
+
+/** Keyed on the id, so opening another application (Draft again) starts a fresh editor. */
+export default function EditorRoute() {
+  const { id } = useParams()
+  return <Editor key={id} />
+}
+
+function Editor() {
   const appId = Number(useParams().id)
+  const navigate = useNavigate()
+  const [redrafting, setRedrafting] = useState(false)
+  const [redraftError, setRedraftError] = useState<ApiError | null>(null)
+  const redraftLock = useRef(false)
   const [app, setApp] = useState<ApplicationDetail | null>(null)
   const [loadError, setLoadError] = useState('')
   const [tex, setTex] = useState('')
@@ -211,6 +225,23 @@ export default function Editor() {
     }
   }
 
+  /** Runs only when pressed: a new application from the same posting and the current Record. */
+  async function onRedraft() {
+    if (!app || redraftLock.current) return
+    redraftLock.current = true
+    setRedrafting(true)
+    setRedraftError(null)
+    try {
+      const created = await api.createApplication(app.posting_id)
+      navigate(`/applications/${created.id}`)
+    } catch (e) {
+      setRedraftError(e instanceof ApiError ? e : new ApiError(0, (e as Error).message))
+    } finally {
+      redraftLock.current = false
+      setRedrafting(false)
+    }
+  }
+
   async function onStatus(next: ApplicationStatus) {
     const prev = status
     setStatus(next)
@@ -230,6 +261,19 @@ export default function Editor() {
       </div>
     )
   if (!app || !score) return <p className="text-muted-foreground">Loading…</p>
+
+  const redraftButton = (
+    <Button
+      size="sm"
+      variant="outline"
+      className="rounded-full"
+      aria-describedby="redraft-note"
+      disabled={redrafting}
+      onClick={() => void onRedraft()}
+    >
+      {redrafting ? 'Drafting…' : '✦ Draft again from current Record'}
+    </Button>
+  )
 
   // The projection comes from the server, counting only the shown suggestions; with none
   // shown there is nothing to project.
@@ -299,9 +343,31 @@ export default function Editor() {
       </header>
 
       {app.stale && (
-        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          <span className="font-medium">Record changed since this was made</span>
-          <span className="text-amber-800"> · This resume is a snapshot and is not updated automatically.</span>
+        <div
+          role="status"
+          aria-labelledby="stale-title"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
+          <span>
+            <span id="stale-title" className="font-medium">Record changed since this was made</span>
+            <span className="text-amber-800"> · This resume is a snapshot and is not updated automatically.</span>
+          </span>
+          {redraftButton}
+        </div>
+      )}
+      {(app.stale || app.uncovered.length > 0) && (
+        <p id="redraft-note" className="text-xs text-muted-foreground">{REDRAFT_NOTE}</p>
+      )}
+      {redraftError && (
+        <div role="alert" className="space-y-1 rounded-lg bg-destructive/10 p-2.5 text-sm text-destructive">
+          <p>Could not draft again: {redraftError.message}</p>
+          {redraftError.status === 400 && (
+            <p><Link to="/settings" className="underline">Open Settings</Link> to add your API key.</p>
+          )}
+          {redraftError.status === 422 && (
+            <p><Link to="/record" className="underline">Open Record</Link> to add more experience.</p>
+          )}
+          {redraftError.status === 502 && <p>This resume is unchanged. Press it again to retry.</p>}
         </div>
       )}
       {actionError && <p role="alert" className="rounded-lg bg-destructive/10 p-2.5 text-sm text-destructive">{actionError}</p>}
@@ -314,7 +380,10 @@ export default function Editor() {
 
       {app.uncovered.length > 0 && (
         <section aria-labelledby="uncovered-heading" className="rounded-xl border border-border bg-muted/40 p-4">
-          <h2 id="uncovered-heading" className="text-sm font-semibold">Not in your record yet</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="uncovered-heading" className="text-sm font-semibold">Not in your record yet</h2>
+            {redraftButton}
+          </div>
           <ul className="mt-2 space-y-2">
             {app.uncovered.map((r, i) => (
               <li key={r.term} className="flex flex-wrap items-center gap-3 text-sm">

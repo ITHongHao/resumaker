@@ -327,4 +327,78 @@ describe('Editor', () => {
     expect(docText()).toContain('report time quickly')
     expect(screen.getByRole('button', { name: /accept/i })).toBeInTheDocument()
   })
+
+  describe('Draft again from current Record', () => {
+    const redraft = /draft again from current record/i
+    const posts = (s: FakeServer) => s.calls.filter((c) => c.method === 'POST' && c.path === '/api/applications')
+
+    it('is offered on the stale banner and on the uncovered panel, and explains it', async () => {
+      setup(detail({ stale: true }))
+      await loaded()
+      const banner = screen.getByRole('status', { name: /record changed/i })
+      expect(within(banner).getByRole('button', { name: redraft })).toBeInTheDocument()
+      const panel = screen.getByRole('region', { name: /not in your record yet/i })
+      expect(within(panel).getByRole('button', { name: redraft })).toBeInTheDocument()
+      expect(screen.getAllByText(/new application.*keeps this one/i).length).toBeGreaterThan(0)
+    })
+
+    it('is not offered when the resume is current and nothing is uncovered', async () => {
+      setup(detail({ stale: false, uncovered: [] }))
+      await loaded()
+      expect(screen.queryByRole('button', { name: redraft })).toBeNull()
+    })
+
+    it('never runs on render or typing', async () => {
+      const { server } = setup(detail({ stale: true }))
+      await loaded()
+      typeAt(offsetAfter('report time'), ' quickly')
+      await new Promise((r) => setTimeout(r, 500))
+      expect(posts(server)).toHaveLength(0)
+      expect(server.calls.some((c) => c.path.startsWith('/api/postings'))).toBe(false)
+    })
+
+    it('one press (even a double click) sends one POST with the same posting and opens the new application', async () => {
+      let release!: () => void
+      const gate = new Promise<void>((r) => (release = r))
+      const { server, router } = setup(detail({ stale: true }), async (r) => {
+        if (r.method === 'POST' && r.path === '/api/applications') {
+          await gate
+          return { status: 201, body: { id: 2 } }
+        }
+        return undefined
+      })
+      await loaded()
+      const user = userEvent.setup()
+      const button = within(screen.getByRole('status', { name: /record changed/i })).getByRole('button', { name: redraft })
+      await user.dblClick(button)
+      await user.click(screen.getAllByRole('button', { name: /drafting/i })[0])
+      expect(screen.getAllByRole('button', { name: /drafting/i }).every((b) => (b as HTMLButtonElement).disabled)).toBe(true)
+      release()
+      await waitFor(() => expect(router.state.location.pathname).toBe('/applications/2'))
+      expect(posts(server)).toHaveLength(1)
+      expect(posts(server)[0].body).toEqual({ posting_id: 7 })
+      expect(server.calls.some((c) => c.path.startsWith('/api/postings'))).toBe(false)
+    })
+
+    it.each([
+      [400, 'No API key saved for the selected AI provider. Add one in Settings.', /open settings/i, '/settings'],
+      [422, "Your Record doesn't have enough in it to build a resume from yet.", /open record/i, '/record'],
+      [502, 'The AI provider took too long to answer. Try again.', null, null],
+    ])('shows %i readably and stays on this resume', async (status, message, link, href) => {
+      const { server, router } = setup(detail({ stale: true }), (r) =>
+        r.method === 'POST' && r.path === '/api/applications' ? { status, body: { detail: message } } : undefined,
+      )
+      await loaded()
+      const user = userEvent.setup()
+      await user.click(within(screen.getByRole('status', { name: /record changed/i })).getByRole('button', { name: redraft }))
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(message)
+      if (link) expect(within(alert).getByRole('link', { name: link })).toHaveAttribute('href', href)
+      else expect(alert).toHaveTextContent(/press it again/i)
+      expect(router.state.location.pathname).toBe('/applications/1')
+      expect(posts(server)).toHaveLength(1)
+      // usable again after the error
+      expect(within(screen.getByRole('status', { name: /record changed/i })).getByRole('button', { name: redraft })).toBeEnabled()
+    })
+  })
 })
