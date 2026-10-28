@@ -100,7 +100,8 @@ def behavioral_to_interview(card: Card, created_at: str = "") -> tuple[Interview
 # - it cites at least one card, and every cited id is one of the cards it was given;
 # - at least one STAR part has text;
 # - every number or number word in it appears in the cited cards (cater._numbers_traceable);
-# - every Record term (card tags and skill-card titles, over the whole Record) it mentions is
+# - every Record term (card tags and skill-card titles, over the whole Record; hidden behavioral
+#   cards are not part of it) it mentions is
 #   supported by a cited card (cater._claims / cater.card_supports, with cater's ambiguity rules).
 # Evidence is what a resume could print (cater._citable) plus the cited card's own job; stored-only
 # extras and behavioral cards are never evidence. A term the Record never mentions cannot be
@@ -174,9 +175,12 @@ class _DraftReply(BaseModel):
 
 
 def _record_terms(cards: list[Card]) -> list[Requirement]:
-    """Card tags and skill-card titles over the whole Record, once each (case-insensitive)."""
+    """Card tags and skill-card titles over the whole Record, once each (case-insensitive).
+    Old behavioral cards are hidden rows, not part of the Record, so their tags do not count."""
     seen: dict[str, str] = {}
     for c in cards:
+        if c.kind == "behavioral":
+            continue
         names = [str(t) for t in c.tags or []]
         if c.kind == "skill":
             names.append(c.title)

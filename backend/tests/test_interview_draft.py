@@ -186,11 +186,13 @@ def test_term_alias_counts_as_mention():
         draft(StubLLM(reply([2], action="I moved the batch jobs onto postgres.")))
 
 
-def test_behavioral_card_terms_still_checked():
-    # Behavioral cards are never evidence, but their tags are Record terms like any other.
+def test_hidden_behavioral_card_tags_are_not_record_terms():
+    # Old behavioral cards are hidden rows, not part of the Record: their tags are not checked
+    # (like any term the Record never mentions), and they are never evidence either.
     cards = [PERF, Card(id=8, kind="behavioral", title="Story", description="x", tags=["Terraform"])]
-    with pytest.raises(DraftError, match="Terraform"):
-        draft(StubLLM(reply([1], action="I used Terraform.")), cards=cards)
+    d = draft(StubLLM(reply([1], action="I used Terraform.")), cards=cards)
+    assert d.source_card_ids == [1]
+    assert interview._record_terms(cards) == interview._record_terms([PERF])
 
 
 def test_stored_only_extras_are_not_evidence():
