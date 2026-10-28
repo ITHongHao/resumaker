@@ -76,6 +76,11 @@ test('record -> posting -> auto cater -> editor -> save -> stale', async ({ page
   await expect(page.getByText('Suggested addition')).toHaveCount(0)
   await expect.poll(cardTitles).toContain('Mentored new engineers through their first')
   await page.getByRole('button', { name: 'Close' }).click()
+  // Deleting a card asks first (window.confirm); accept it.
+  page.once('dialog', (d) => {
+    expect(d.message()).toContain('Delete "Mentored new engineers through their first"')
+    void d.accept()
+  })
   await page.getByRole('button', { name: 'Delete Mentored new engineers through their first' }).click()
   await expect.poll(cardTitles).not.toContain('Mentored new engineers through their first')
 
