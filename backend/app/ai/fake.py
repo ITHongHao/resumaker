@@ -49,7 +49,7 @@ def _expanded(card: dict) -> str:
 class FakeLLM:
     def complete(self, system, user, images=[], json_schema=None) -> str:
         # Imported here: these modules import provider, which lazily imports this one.
-        from app import cater
+        from app import cater, interview
         from app.ai import askai
         from app.postings import extract
 
@@ -61,6 +61,8 @@ class FakeLLM:
             return json.dumps(self._cater(user))
         if system == cater.SUGGEST_SYSTEM_PROMPT:
             return json.dumps(self._suggest(user))
+        if system == interview.DRAFT_SYSTEM_PROMPT:
+            return json.dumps(self._draft(user))
         raise ValueError("FakeLLM does not know this prompt")
 
     def _propose(self, user: str) -> dict:
@@ -110,3 +112,15 @@ class FakeLLM:
             out.append({"bullet_index": r["bullet_index"], "new": _expanded(card),
                         "terms": r["terms_its_card_supports"], "source_card_id": card["id"]})
         return {"suggestions": out}
+
+    def _draft(self, user: str) -> dict:
+        """Cites the first card offered and uses only that card's own words: its title as the
+        Situation and its description (or details) as the Action."""
+        cards = _section(user, "Cards (the only facts you may use):") or []
+        if not cards:
+            return {"situation": "", "task": "", "action": "", "result": "", "source_card_ids": []}
+        card = cards[0]
+        # Not truncated (unlike _sentence), so a number is never cut in two.
+        body = re.sub(r"\s+", " ", card.get("description") or card.get("details") or "").strip()
+        return {"situation": _sentence(card["title"]), "task": "", "action": body,
+                "result": "", "source_card_ids": [card["id"]]}

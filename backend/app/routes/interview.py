@@ -6,8 +6,10 @@ from pydantic import BaseModel, field_validator
 from sqlmodel import Session, col, delete, func, select
 
 from app import interview
+from app.ai.provider import LLM, AIError
 from app.db import get_session
 from app.models import Card, HiddenQuestion, InterviewAnswer, InterviewQuestion, Job
+from app.routes.ai import llm_dep
 
 router = APIRouter(prefix="/api/interview")
 
@@ -59,6 +61,10 @@ class AnswerIn(BaseModel):
     job_id: int | None = None
 
 
+class DraftIn(BaseModel):
+    question_ref: str
+
+
 class AnswerPatch(BaseModel):
     situation: str | None = None
     task: str | None = None
@@ -69,11 +75,16 @@ class AnswerPatch(BaseModel):
 
 
 def _ref_exists(session: Session, ref: str) -> bool:
-    if ref.startswith("b:"):
-        return interview.builtin_for_ref(ref) is not None
+    return _question_text(session, ref) is not None
+
+
+def _question_text(session: Session, ref: str) -> str | None:
+    if b := interview.builtin_for_ref(ref):
+        return b.text
     if ref.startswith("c:") and _ID.match(ref[2:]):
-        return session.get(InterviewQuestion, int(ref[2:])) is not None
-    return False
+        q = session.get(InterviewQuestion, int(ref[2:]))
+        return q.text if q is not None else None
+    return None
 
 
 def _custom(session: Session, qid: str) -> InterviewQuestion:
@@ -252,3 +263,20 @@ def delete_answer(answer_id: int, session: Session = Depends(get_session)):
     session.delete(_answer(session, answer_id))
     session.commit()
     return Response(status_code=204)
+
+
+@router.post("/draft", response_model=interview.Draft)
+def draft(body: DraftIn, session: Session = Depends(get_session), llm: LLM = Depends(llm_dep)):
+    """Proposes a STAR answer drawn from the Record. Never writes; the client saves an accepted
+    draft via POST /answers."""
+    question = _question_text(session, body.question_ref)
+    if question is None:
+        raise HTTPException(404, f"Question {body.question_ref} not found")
+    cards = list(session.exec(select(Card).order_by(Card.id)).all())
+    jobs = list(session.exec(select(Job).order_by(Job.id)).all())
+    try:
+        return interview.draft_answer(llm, question, cards, jobs)
+    except interview.DraftError as e:
+        raise HTTPException(422, str(e)) from None
+    except AIError as e:
+        raise HTTPException(502, str(e)) from None

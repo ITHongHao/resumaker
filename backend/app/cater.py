@@ -288,7 +288,10 @@ _NUMBER = re.compile(
     re.IGNORECASE,
 )
 _SCALE = re.compile(rf"\b({_SCALES})s?\b", re.IGNORECASE)
-_MULTIPLIER = re.compile(r"\b(doubl|tripl|quadrupl|halv)(?:ed|es|ing)\b", re.IGNORECASE)
+_MULTIPLIER = re.compile(
+    r"\b(?:(doubl|tripl|quadrupl|halv)(?:e|ed|es|ing)|(half|twice))\b", re.IGNORECASE)
+# "half" is the same quantity as "halved", "twice" the same as "doubled".
+_MULTIPLIER_WORDS = {"half": "halv", "twice": "doubl"}
 _FOLD = re.compile(rf"\b(\d+|one|{_WORDS})-?fold\b", re.IGNORECASE)
 
 
@@ -299,7 +302,7 @@ def _value(token: str) -> str:
 
 def _quantities(text: str) -> set[tuple[str, str]]:
     """(value, unit) pairs. unit is "" (bare), "%", "$", "x" (10x, threefold), "scale"
-    (dozen ... billion) or "mult" (doubled, tripled, quadrupled, halved). Number words one to
+    (dozen ... billion) or "mult" (double(d), triple(d), quadruple(d), halve(d), half, twice). Number words one to
     twenty map to digits, so "ten" and "10" are the same quantity."""
     out = set()
     for m in _NUMBER.finditer(text):
@@ -314,7 +317,8 @@ def _quantities(text: str) -> set[tuple[str, str]]:
             unit = ""
         out.add((_value(m.group(2)), unit))
     out |= {(m.group(1).lower(), "scale") for m in _SCALE.finditer(text)}
-    out |= {(m.group(1).lower(), "mult") for m in _MULTIPLIER.finditer(text)}
+    out |= {((m.group(1) or _MULTIPLIER_WORDS[m.group(2).lower()]).lower(), "mult")
+            for m in _MULTIPLIER.finditer(text)}
     out |= {(_value(m.group(1)), "x") for m in _FOLD.finditer(text)}
     return out
 
