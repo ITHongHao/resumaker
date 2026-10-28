@@ -276,34 +276,47 @@ def uncovered(missing: list[Requirement], cards: list[Card]) -> list[Requirement
 # "one" counts only before a scale word ("one million"); alone it is usually a pronoun.
 _SMALL_NUMBERS = {w: str(i) for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen "
-    "fifteen sixteen seventeen eighteen nineteen twenty".split()) if i}
+    "fifteen sixteen seventeen eighteen nineteen".split()) if i}
+_TENS = {w: str(10 * i) for i, w in enumerate(
+    "twenty thirty forty fifty sixty seventy eighty ninety".split(), start=2)}
+_UNITS = "|".join(w for w, v in _SMALL_NUMBERS.items() if int(v) < 10)
 _SCALES = "dozen|hundred|thousand|million|billion"
-_WORDS = "|".join(w for w in _SMALL_NUMBERS if w != "one")
+_WORDS = "|".join([*(w for w in _SMALL_NUMBERS if w != "one"), *_TENS])
+# A tens word with an optional unit: "forty", "thirty-five", "twenty one".
+_TENS_NUMBER = rf"\b(?:{'|'.join(_TENS)})(?:[\s-](?:{_UNITS}))?\b"
 # A number (digits, or a number word), with an optional "$" before it or "%"/"percent"/
 # "dollars"/"usd"/"x" after it.
 _NUMBER = re.compile(
     r"(\$\s?)?"
-    rf"(\d+(?:[.,]\d+)*|\b(?:{_WORDS})\b|\bone\b(?=[\s-]+(?:{_SCALES})s?\b))"
+    rf"(\d+(?:[.,]\d+)*|{_TENS_NUMBER}|\b(?:{_WORDS})\b|\bone\b(?=[\s-]+(?:{_SCALES})s?\b))"
     r"(\s?%|\s?percent\b|\s?dollars?\b|\s?usd\b|x\b|\u00d7)?",
     re.IGNORECASE,
 )
 _SCALE = re.compile(rf"\b({_SCALES})s?\b", re.IGNORECASE)
+# Multipliers and fractions. Not "double-check"/"triple check" or "third-party"/"third party".
 _MULTIPLIER = re.compile(
-    r"\b(?:(doubl|tripl|quadrupl|halv)(?:e|ed|es|ing)|(half|twice))\b", re.IGNORECASE)
-# "half" is the same quantity as "halved", "twice" the same as "doubled".
-_MULTIPLIER_WORDS = {"half": "halv", "twice": "doubl"}
+    r"\b(?:(doubl|tripl|quadrupl|halv)(?:e|ed|es|ing)|(half|twice|thirds?|quarters?))\b"
+    r"(?![\s-]check(?:s|ed|ing)?\b|[\s-]part(?:y|ies)\b)",
+    re.IGNORECASE)
+# The same quantity spelled differently: "half" = "halved", "twice" = "doubled", "thirds" = "third".
+_MULTIPLIER_WORDS = {"half": "halv", "twice": "doubl", "third": "third", "thirds": "third",
+                     "quarter": "quarter", "quarters": "quarter"}
 _FOLD = re.compile(rf"\b(\d+|one|{_WORDS})-?fold\b", re.IGNORECASE)
 
 
 def _value(token: str) -> str:
     token = token.lower()
+    words = re.split(r"[\s-]+", token)
+    if words[0] in _TENS:
+        return str(int(_TENS[words[0]]) + sum(int(_SMALL_NUMBERS[w]) for w in words[1:]))
     return _SMALL_NUMBERS.get(token, token.replace(",", ""))
 
 
 def _quantities(text: str) -> set[tuple[str, str]]:
     """(value, unit) pairs. unit is "" (bare), "%", "$", "x" (10x, threefold), "scale"
-    (dozen ... billion) or "mult" (double(d), triple(d), quadruple(d), halve(d), half, twice). Number words one to
-    twenty map to digits, so "ten" and "10" are the same quantity."""
+    (dozen ... billion) or "mult" (double(d), triple(d), quadruple(d), halve(d), half, twice,
+    third(s), quarter(s)). Number words one to ninety-nine map to digits, so "ten" and "10",
+    "thirty-five" and "35" are the same quantity."""
     out = set()
     for m in _NUMBER.finditer(text):
         suffix = (m.group(3) or "").strip().lower()

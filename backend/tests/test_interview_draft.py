@@ -71,6 +71,11 @@ def test_valid_draft_passes():
     assert QUESTION in call["user"]
 
 
+def test_prompt_asks_to_cite_the_card_with_each_term():
+    assert "cite the card that contains" in DRAFT_SYSTEM_PROMPT
+    assert "card's own wording" in DRAFT_SYSTEM_PROMPT
+
+
 def test_schema_is_strict():
     assert DRAFT_SCHEMA["additionalProperties"] is False
     assert set(DRAFT_SCHEMA["required"]) == {"situation", "task", "action", "result",
@@ -112,7 +117,8 @@ def test_number_in_an_uncited_card_does_not_count():
 @pytest.mark.parametrize("claim", [
     "I tripled throughput.", "I doubled throughput.", "I halved the run time.",
     "I cut the run time in half.", "The jobs ran twice as fast.", "I helped double throughput.",
-    "I moved ten jobs.",
+    "I moved ten jobs.", "I cut costs forty percent.", "I moved fifty jobs.",
+    "I moved thirty-five jobs.", "I cut the run time by a third.", "I cut the run time by a quarter.",
 ])
 def test_rejects_number_word(claim):
     llm = StubLLM(reply([2], action="I moved the batch jobs onto a new cluster.", result=claim))
@@ -124,6 +130,34 @@ def test_number_word_in_cited_card_is_allowed():
     card = Card(id=9, kind="project", title="Batch", description="Tripled batch throughput.")
     d = draft(StubLLM(reply([9], result="I tripled batch throughput.")), cards=[card], jobs=[])
     assert d.result == "I tripled batch throughput."
+
+
+@pytest.mark.parametrize("claim,card_text", [
+    ("I cut costs forty percent.", "Cut costs 40%."),
+    ("I cut costs 40%.", "Cut costs forty percent."),
+    ("I moved thirty-five jobs.", "Moved 35 jobs."),
+    ("I cut the run time by a third.", "Cut the run time by a third."),
+    ("I cut the run time by a quarter.", "Cut the run time by a quarter."),
+])
+def test_tens_and_fraction_words_in_cited_card_are_allowed(claim, card_text):
+    card = Card(id=9, kind="project", title="Batch", description=card_text)
+    assert draft(StubLLM(reply([9], result=claim)), cards=[card], jobs=[]).result == claim
+
+
+def test_double_check_is_not_a_number():
+    d = draft(StubLLM(reply([2], action="I double-checked the batch jobs on the new cluster.")))
+    assert d.source_card_ids == [2]
+
+
+def test_job_dates_give_years_only():
+    job = Job(id=8, company="Acme", title="Engineer", start_date="2021-03", end_date="2023-12")
+    card = Card(id=9, job_id=8, kind="project", title="Batch", description="Moved batch jobs.")
+    ok = draft(StubLLM(reply([9], situation="From 2021 to 2023 I moved batch jobs.")),
+               cards=[card], jobs=[job])
+    assert ok.source_card_ids == [9]
+    for claim in ("I led 12 engineers.", "I led 3 engineers."):
+        with pytest.raises(DraftError, match="number"):
+            draft(StubLLM(reply([9], result=claim)), cards=[card], jobs=[job])
 
 
 def test_rejects_skill_from_another_card():

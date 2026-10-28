@@ -1,4 +1,5 @@
 import json
+import re
 from typing import NamedTuple
 
 from pydantic import BaseModel, StrictInt, StrictStr, ValidationError
@@ -86,7 +87,7 @@ Rules:
 - Use only facts from the supplied cards. Never add employers, job titles, dates, numbers, metrics, tools, technologies, people, or results that are not in the cards you cite.
 - Reword rather than invent: you may rephrase and connect what the cards say, but never claim more than they say.
 - Include a number (count, percentage, dollar amount, duration, or a word such as "doubled" or "half") only when that exact number is in a card you cite.
-- Every tool, technology or skill you name must be in a card you cite.
+- Every tool, technology or skill you name must be in a card you cite: cite the card that contains any tool, skill or term you name, and use the card's own wording for tools.
 - List in source_card_ids the id of every card the answer uses, at least one. Use only ids from the cards listed.
 - Write in the first person ("I"), about 150 words in total across the four parts.
 - If the cards cannot support a part, leave that part as an empty string rather than inventing it.
@@ -161,10 +162,14 @@ def _record_terms(cards: list[Card]) -> list[Requirement]:
     return [Requirement(term=t, kind="skill", weight=1) for t in seen.values()]
 
 
+_YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
 def _job_card(job: Job) -> Card:
-    """A cited card's job as evidence: the fields a resume prints for it."""
-    dates = " - ".join(d for d in (job.start_date, job.end_date) if d)
-    body = "\n".join(f for f in (job.company, job.location, dates) if f)
+    """A cited card's job as evidence: the fields a resume prints for it. From the dates only
+    the years count, so a month or day ("2023-12", "03/2021") is never evidence for a number."""
+    years = " ".join(_YEAR.findall(f"{job.start_date} {job.end_date}"))
+    body = "\n".join(f for f in (job.company, job.location, years) if f)
     return Card(id=None, job_id=job.id, kind="project", title=job.title, description=body)
 
 

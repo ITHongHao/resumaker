@@ -747,6 +747,11 @@ NUMBER_WORD_BULLETS = [
     "Cut report latency in half",
     "Made reports twice as fast",
     "Helped double pipeline throughput",
+    "Cut costs forty percent",
+    "Hired fifty engineers",
+    "Led thirty-five engineers",
+    "Cut build time by a third",
+    "Cut build time by a quarter",
     "Quadrupled test coverage",
     "Served two million users",
     "Reviewed a dozen designs",
@@ -771,6 +776,8 @@ def test_number_words_not_in_card_are_dropped(claim):
 @pytest.mark.parametrize("claim", NUMBER_WORD_BULLETS)
 def test_number_words_in_card_are_allowed(claim):
     card = Card(id=1, kind="project", title="Growth", description=(
+        "Cut costs forty percent, hired fifty engineers, led thirty-five engineers, cut build "
+        "time by a third and then by a quarter. "
         "Tripled revenue, doubled throughput, halved latency and quadrupled coverage. Served two "
         "million users, reviewed a dozen designs, fixed hundreds of bugs, led ten engineers, made "
         "queries 10x faster, cut costs threefold, grew usage 3-fold, onboarded thousands of "
@@ -789,6 +796,42 @@ def test_number_words_in_card_are_allowed(claim):
 ])
 def test_number_words_and_digits_are_interchangeable_and_one_is_not_a_number_alone(text, kept):
     cards = [Card(id=1, kind="project", title="Team", description="Led 10 engineers on 2 teams"),
+             Card(id=2, kind="project", title="Docs", description="Wrote documentation")]
+    llm = FakeLLM(cater_reply((1, text), (2, "Wrote documentation")))
+    texts = [b.text for b in auto_cater(llm, [], cards, _posting([req("Python")]))]
+    assert texts == ([text] if kept else []) + ["Wrote documentation"]
+
+
+@pytest.mark.parametrize("text,card_text,kept", [
+    ("Cut costs 40%", "Cut costs forty percent", True),
+    ("Cut costs forty percent", "Cut costs 40%", True),
+    ("Led 35 engineers", "Led thirty-five engineers", True),
+    ("Led thirty five engineers", "Led 35 engineers", True),
+    ("Led thirty-five engineers", "Led 5 engineers", False),
+    ("Led 5 engineers", "Led thirty-five engineers", False),
+    ("Led ninety engineers", "Led 9 engineers", False),
+    ("Cut build time by two thirds", "Cut build time by a third", False),
+    ("Cut build time by two thirds", "Cut build time by two-thirds", True),
+    ("Cut build time by a quarter", "Cut build time in half", False),
+])
+def test_tens_and_fraction_words(text, card_text, kept):
+    cards = [Card(id=1, kind="project", title="Team", description=card_text),
+             Card(id=2, kind="project", title="Docs", description="Wrote documentation")]
+    llm = FakeLLM(cater_reply((1, text), (2, "Wrote documentation")))
+    texts = [b.text for b in auto_cater(llm, [], cards, _posting([req("Python")]))]
+    assert texts == ([text] if kept else []) + ["Wrote documentation"]
+
+
+@pytest.mark.parametrize("text,kept", [
+    ("Double-checked the release notes", True),
+    ("Triple checked the release notes", True),
+    ("Integrated third-party payment APIs", True),
+    ("Integrated third party payment APIs", True),
+    ("Doubled checkout conversion", False),  # "check" only as its own word
+    ("Doubled the release notes", False),
+])
+def test_check_and_third_party_are_not_quantities(text, kept):
+    cards = [Card(id=1, kind="project", title="Release", description="Wrote the release notes"),
              Card(id=2, kind="project", title="Docs", description="Wrote documentation")]
     llm = FakeLLM(cater_reply((1, text), (2, "Wrote documentation")))
     texts = [b.text for b in auto_cater(llm, [], cards, _posting([req("Python")]))]
