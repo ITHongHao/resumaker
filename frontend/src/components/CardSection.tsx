@@ -58,7 +58,10 @@ export default function CardSection({
               setError(null)
               setEditing(c.id)
             }}
-            onDelete={() => run(() => api.deleteCard(c.id), () => {})}
+            onDelete={() => {
+              if (!window.confirm(`Delete "${c.title}"? This cannot be undone.`)) return
+              void run(() => api.deleteCard(c.id), () => {})
+            }}
           />
         ),
       )}

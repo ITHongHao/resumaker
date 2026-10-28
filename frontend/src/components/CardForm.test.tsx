@@ -129,4 +129,21 @@ describe('CardForm', () => {
     expect(screen.getByLabelText(/^date$/i)).toHaveValue('Mar 2023')
     expect(screen.getByLabelText(/^details/i)).toHaveValue('Associate level')
   })
+
+  it('deleting a card asks first, and Cancel keeps it', async () => {
+    const card = { id: 9, job_id: null, kind: 'skill' as const, title: 'Python', description: '', details: '', tags: [], extra: {} }
+    const server = installFakeApi({ cards: [card] })
+    const onChanged = vi.fn()
+    const user = userEvent.setup()
+    render(<CardSection jobId={null} cards={[card]} kinds={['skill']} addLabel="Add skill" onChanged={onChanged} />)
+    const confirm = vi.fn(() => false)
+    vi.stubGlobal('confirm', confirm)
+    await user.click(screen.getByRole('button', { name: /delete python/i }))
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/delete "Python"/i))
+    expect(server.calls.some((c) => c.method === 'DELETE')).toBe(false)
+    confirm.mockReturnValue(true)
+    await user.click(screen.getByRole('button', { name: /delete python/i }))
+    expect(server.calls.filter((c) => c.method === 'DELETE' && c.path === '/api/cards/9')).toHaveLength(1)
+    expect(onChanged).toHaveBeenCalled()
+  })
 })
