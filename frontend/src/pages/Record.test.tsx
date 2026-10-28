@@ -41,6 +41,20 @@ describe('JobPage', () => {
     expect(post.body).toMatchObject({ job_id: 1, kind: 'project', title: 'Churn model', tags: ['ML', 'Airflow'] })
   })
 
+  it('does not list a migrated behavioral card linked to the job', async () => {
+    installFakeApi({
+      jobs: [job],
+      cards: [
+        { id: 3, job_id: 1, kind: 'project', title: 'Churn model', description: '', details: '', tags: [], extra: {} },
+        { id: 4, job_id: 1, kind: 'behavioral', title: 'Tell me about a conflict', description: 'STAR text', details: '', tags: [], extra: {} },
+      ],
+    })
+    renderJob()
+    expect(await screen.findByText('Churn model')).toBeInTheDocument()
+    expect(screen.queryByText('Tell me about a conflict')).toBeNull()
+    expect(screen.queryByText(/behavioral/i)).toBeNull()
+  })
+
   it('shows stored yes/no job fields with their labels', async () => {
     installFakeApi({ jobs: [{ ...job, extra: { currently_here: 'yes', ok_to_contact: 'no' } }] })
     renderJob()
@@ -109,6 +123,18 @@ describe('Record', () => {
     expect(screen.queryByText('Tell me about a conflict')).toBeNull()
     expect(screen.queryByRole('region', { name: /other/i })).toBeNull()
     expect(screen.queryByText(/behavioral/i)).toBeNull()
+  })
+
+  it('does not count a behavioral card linked to a job', async () => {
+    installFakeApi({
+      jobs: [job],
+      cards: [
+        { id: 3, job_id: 1, kind: 'project', title: 'Churn model', description: '', details: '', tags: [], extra: {} },
+        { id: 4, job_id: 1, kind: 'behavioral', title: 'Tell me about a conflict', description: '', details: '', tags: [], extra: {} },
+      ],
+    })
+    render(<MemoryRouter><Record /></MemoryRouter>)
+    expect(await screen.findByText(/1 project and accomplishments/)).toBeInTheDocument()
   })
 
   it('has no Other section when every card has a home', async () => {

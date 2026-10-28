@@ -6,7 +6,7 @@ import AskAIDrawer from '@/components/AskAIDrawer'
 import CardSection from '@/components/CardSection'
 import JobForm from '@/components/JobForm'
 import { Button } from '@/components/ui/button'
-import { displayValue, FIELDS, hasValue } from '@/lib/recordFields'
+import { displayValue, FIELDS, hasValue, onRecord } from '@/lib/recordFields'
 
 export default function JobPage() {
   const id = Number(useParams().id)
@@ -20,7 +20,7 @@ export default function JobPage() {
     try {
       const [j, cs] = await Promise.all([api.getJob(id), api.listCards({ job_id: id })])
       setJob(j)
-      setCards(cs)
+      setCards(cs.filter(onRecord))
     } catch (e) {
       setError((e as Error).message)
     }

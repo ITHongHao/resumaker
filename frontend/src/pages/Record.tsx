@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api, type Card, type CardKind, type Job } from '@/api'
 import CardSection from '@/components/CardSection'
 import JobForm from '@/components/JobForm'
-import { JOBLESS_KINDS } from '@/lib/recordFields'
+import { JOBLESS_KINDS, onRecord } from '@/lib/recordFields'
 
 const SECTIONS: { kind: CardKind; title: string; add: string }[] = [
   { kind: 'education', title: 'Education', add: 'Add education' },
@@ -33,11 +33,12 @@ export default function Record() {
     void load()
   }, [load])
 
-  const countFor = (jobId: number) => cards.filter((c) => c.job_id === jobId).length
+  // Behavioral answers live on the Interview tab and are neither listed nor counted here.
+  const shown = cards.filter(onRecord)
+  const countFor = (jobId: number) => shown.filter((c) => c.job_id === jobId).length
   // Job-less cards of a kind no section lists (an accomplishment from an older import).
-  // Behavioral answers live on the Interview tab and are not listed here.
   const sectionKinds = new Set(SECTIONS.map((s) => s.kind))
-  const others = cards.filter((c) => c.job_id === null && c.kind !== 'behavioral' && !sectionKinds.has(c.kind))
+  const others = shown.filter((c) => c.job_id === null && !sectionKinds.has(c.kind))
 
   return (
     <div className="space-y-10">

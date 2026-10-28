@@ -71,6 +71,12 @@ export function knownExtra(kind: CardKind, extra: Record<string, unknown> | unde
   return out
 }
 
+/** Old behavioral cards are kept (hidden) after their move to the Interview tab; the Record
+ * never lists or counts them. */
+export function onRecord(card: { kind: CardKind }): boolean {
+  return card.kind !== 'behavioral'
+}
+
 /** Kinds a card under a job may have, and kinds a card outside any job may have. */
 export const JOB_KINDS: CardKind[] = ['project', 'accomplishment']
 export const JOBLESS_KINDS: CardKind[] = ['project', 'education', 'skill', 'certificate']
