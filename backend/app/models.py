@@ -67,3 +67,30 @@ class CardUpdate(SQLModel):
     details: str | None = None
     tags: list[str] | None = None
     extra: dict | None = None
+
+
+class ProfileBase(SQLModel):
+    name: str = ""
+    email: str = ""
+    phone: str = ""
+    links: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    work_authorization: str = ""
+
+
+class Profile(ProfileBase, table=True):
+    """Singleton row, always id=1."""
+
+    id: int = Field(default=1, primary_key=True)
+
+
+Provider = Literal["anthropic", "openai"]
+
+
+class AppSettings(SQLModel, table=True):
+    """Singleton row, always id=1. Holds no secrets; keys live in the KeyStore."""
+
+    id: int = Field(default=1, primary_key=True)
+    provider: Provider = Field(
+        default="anthropic", sa_column=Column(String, nullable=False)
+    )
+    model: str = ""
