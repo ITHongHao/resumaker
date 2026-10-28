@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Suggestion } from '@/api'
-import { lineMentions, locateSuggestions } from './termMatch'
+import { bodyLines, lineMentions, linesForTerm, locateSuggestions, termRanges } from './termMatch'
 
 const sugg = (bullet_index: number, old_tex: string): Suggestion => ({
   bullet_index, old: old_tex, new: `${old_tex} better`, old_tex, new_tex: `${old_tex} better`,
@@ -45,5 +45,34 @@ describe('lineMentions', () => {
     expect(lineMentions('C', '\\resumeItem{Wrote C++}')).toBe(false)
     expect(lineMentions('Pipeline', '\\resumeItem{Built pipelines}')).toBe(true)
     expect(lineMentions('Airflow', '% Airflow in a comment')).toBe(false)
+  })
+})
+
+describe('only the document body is highlighted', () => {
+  const doc = [
+    '\\documentclass{article}',
+    '\\usepackage[english]{babel}',
+    '\\usepackage[usenames,dvipsnames]{color}',
+    '\\begin{document}',
+    '\\resumeItem{Wrote English docs}',
+    '\\end{document}',
+    'English after the end',
+  ]
+
+  it('ignores preamble package names and text after \\end{document}', () => {
+    expect(linesForTerm(doc, 'English', [])).toEqual([4])
+    expect(linesForTerm(doc, 'color', [])).toEqual([])
+  })
+
+  it('uses the whole text when there is no \\begin{document}', () => {
+    expect(linesForTerm(['\\usepackage{color}', 'color line'], 'color', [])).toEqual([0, 1])
+  })
+
+  it('blanks the non-body part of a line, keeping offsets', () => {
+    const one = ['\\usepackage{color}\\begin{document}color here\\end{document} color']
+    const body = bodyLines(one)
+    expect(body[0]).toHaveLength(one[0].length)
+    expect(linesForTerm(one, 'color', [])).toEqual([0])
+    expect(termRanges('color', body[0])).toEqual([[34, 39]])
   })
 })

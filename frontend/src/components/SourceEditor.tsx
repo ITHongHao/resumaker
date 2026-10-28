@@ -13,7 +13,7 @@ import {
 import { useEffect, useRef } from 'react'
 
 import type { Suggestion } from '@/api'
-import { ITEM_PREFIX, linesForTerm, locateSuggestions, termRanges } from '@/lib/termMatch'
+import { ITEM_PREFIX, bodyLines, linesForTerm, locateSuggestions, termRanges } from '@/lib/termMatch'
 
 /*
  * The .tex source editor. Suggestions are tracked changes drawn on the document itself:
@@ -178,10 +178,12 @@ function build(state: EditorState): DecorationSet {
     )
   })
   if (highlightTerm) {
+    const body = bodyLines(lines)
     for (const i of linesForTerm(lines, highlightTerm, suggestions)) {
       const line = state.doc.line(i + 1)
       out.push(hitLine.range(line.from))
-      for (const [a, b] of termRanges(highlightTerm, line.text)) out.push(hitTerm.range(line.from + a, line.from + b))
+      // Ranges come from the body text only, so a preamble word on the same line is never marked.
+      for (const [a, b] of termRanges(highlightTerm, body[i])) out.push(hitTerm.range(line.from + a, line.from + b))
     }
   }
   return Decoration.set(out, true)

@@ -44,6 +44,22 @@ _COMMENT_OR_ESCAPE = re.compile(r"\\.|%[^\n]*", re.DOTALL)
 _LATEX_TOKEN = re.compile(r"\\([%&#$_{}])|\\[a-zA-Z]+\*?|\\.|[{}]", re.DOTALL)
 
 
+_BEGIN_DOCUMENT = re.compile(r"\\begin\s*\{document\}")
+_END_DOCUMENT = re.compile(r"\\end\s*\{document\}")
+
+
+def document_body(text: str) -> str:
+    """The text between \\begin{document} and \\end{document}: the preamble's package names and
+    options ("[english]{babel}", "{color}") are not resume content. Without \\begin{document},
+    the whole text."""
+    begin = _BEGIN_DOCUMENT.search(text)
+    if begin is None:
+        return text
+    body = text[begin.end():]
+    end = _END_DOCUMENT.search(body)
+    return body[: end.start()] if end else body
+
+
 def strip_latex(text: str) -> str:
     """Drop comments and command names, keep argument text and escaped literals."""
     no_comments = _COMMENT_OR_ESCAPE.sub(lambda m: m.group(0) if m.group(0).startswith("\\") else "", text)
@@ -113,7 +129,8 @@ def match_status(term: str, text: str) -> Status:
 
 
 def score(requirements: list[Requirement], resume_text: str) -> ScoreResult:
-    text = strip_latex(resume_text).lower()
+    """Scores only the document body (see document_body)."""
+    text = strip_latex(document_body(resume_text)).lower()
     stemmed_text = _stemmed(text)
     matches = [RequirementMatch(term=r.term, status=_status(r.term, text, stemmed_text)) for r in requirements]
 

@@ -83,6 +83,38 @@ export function lineMentions(term: string, line: string): boolean {
   return ` ${stemTokens(plainLine(line)).join(' ')} `.includes(needle)
 }
 
+const BEGIN_DOCUMENT = /\\begin\s*\{document\}/
+const END_DOCUMENT = /\\end\s*\{document\}/
+
+/**
+ * The lines with everything outside the document body blanked to spaces (same lengths, so
+ * offsets still map onto the original lines): the preamble up to \begin{document} and anything
+ * from \end{document} on. Like the scorer, a text without \begin{document} is all body.
+ */
+export function bodyLines(lines: string[]): string[] {
+  const begin = lines.findIndex((l) => BEGIN_DOCUMENT.test(l))
+  if (begin < 0) return lines
+  const blank = (s: string) => ' '.repeat(s.length)
+  let ended = false
+  return lines.map((line, i) => {
+    if (i < begin || ended) return blank(line)
+    let text = line
+    let from = 0
+    if (i === begin) {
+      const m = BEGIN_DOCUMENT.exec(line)!
+      from = m.index + m[0].length
+    }
+    const end = END_DOCUMENT.exec(line.slice(from))
+    let to = line.length
+    if (end) {
+      to = from + end.index
+      ended = true
+    }
+    text = blank(line.slice(0, from)) + line.slice(from, to) + blank(line.slice(to))
+    return text
+  })
+}
+
 export const ITEM_PREFIX = '\\resumeItem{'
 export const itemLine = (textTex: string) => `${ITEM_PREFIX}${textTex}}`
 
@@ -112,12 +144,12 @@ export function locateSuggestions(lines: string[], suggestions: Suggestion[]): n
 }
 
 /**
- * 0-based indexes of lines a chip should highlight: lines mentioning the term, plus the lines
- * of shown suggestions that would add it.
+ * 0-based indexes of lines a chip should highlight: lines whose document-body text mentions the
+ * term (see bodyLines), plus the lines of shown suggestions that would add it.
  */
 export function linesForTerm(lines: string[], term: string, suggestions: Suggestion[]): number[] {
   const hit = new Set<number>()
-  lines.forEach((l, i) => lineMentions(term, l) && hit.add(i))
+  bodyLines(lines).forEach((l, i) => lineMentions(term, l) && hit.add(i))
   const key = norm(term)
   locateSuggestions(lines, suggestions).forEach((at, k) => {
     if (at >= 0 && suggestions[k].terms.some((t) => norm(t) === key)) hit.add(at)

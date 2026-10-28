@@ -151,3 +151,38 @@ def test_exact_or_alias_has_no_stem_fallback():
     assert not exact_or_alias("deployment", "deployed services")
     # score() and match_status keep their stem-lenient grading.
     assert status_of("React", "Reacted quickly") == "partial"
+
+
+# --- only the document body is scored ------------------------------------------------
+
+
+def test_preamble_package_names_never_match():
+    from app.latex.template import render_tex
+    from app.models import Profile
+
+    empty = render_tex(Profile(), [], [], {})
+    reqs = [Requirement(term=t, kind="skill", weight=2) for t in ("English", "color", "hyperref", "Verbatim")]
+    result = score(reqs, empty)
+    assert [m.status for m in result.matches] == ["missing"] * 4
+    assert result.score == 0
+
+
+def test_body_text_still_scores_and_text_after_end_document_is_ignored():
+    tex = ("\\documentclass{article}\\usepackage[english]{babel}\n\\begin{document}\nPython and English\n"
+           "\\end{document}\nKubernetes after the end")
+    reqs = [Requirement(term=t, kind="skill", weight=1) for t in ("Python", "English", "Kubernetes")]
+    assert [m.status for m in score(reqs, tex).matches] == ["matched", "matched", "missing"]
+
+
+def test_no_begin_document_scores_the_whole_text():
+    reqs = [Requirement(term="Python", kind="skill", weight=1)]
+    assert score(reqs, "Built Python services").score == 100
+    assert score(reqs, "\\usepackage{python}").matches[0].status == "matched"
+
+
+def test_potential_score_also_ignores_the_preamble():
+    from app.scoring import potential_score
+
+    tex = "\\usepackage{color}\n\\begin{document}\n\\resumeItem{x}\n\\end{document}"
+    reqs = [Requirement(term="color", kind="skill", weight=1)]
+    assert potential_score(reqs, tex, [("\\resumeItem{x}", "\\resumeItem{y}")]) == 0
