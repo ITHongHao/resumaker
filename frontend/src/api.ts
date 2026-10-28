@@ -156,6 +156,37 @@ export interface ApplicationCreated {
   id: number
 }
 
+export interface InterviewQuestion {
+  ref: string
+  text: string
+  category: string
+  builtin: boolean
+  hidden: boolean
+  answer_count: number
+}
+export type AnswerSource = { id: number; title: string } | { id: number; removed: true }
+export interface StarParts {
+  situation: string
+  task: string
+  action: string
+  result: string
+}
+export interface InterviewAnswer extends StarParts {
+  id: number
+  question_ref: string
+  source_card_ids: number[]
+  job_id: number | null
+  source_cards: AnswerSource[]
+}
+export interface AnswerDraft extends StarParts {
+  source_card_ids: number[]
+}
+export interface AnswerInput extends StarParts {
+  question_ref: string
+  source_card_ids?: number[]
+  job_id?: number | null
+}
+
 export class ApiError extends Error {
   status: number
   fallback?: string
@@ -285,6 +316,24 @@ export const api = {
   saveVersion: (id: number, tex: string) =>
     request<ResumeVersion>('POST', `/api/applications/${id}/versions`, { tex }),
   compileLatex,
+
+  listQuestions: (includeHidden = false) =>
+    request<InterviewQuestion[]>('GET', `/api/interview/questions${includeHidden ? '?include_hidden=true' : ''}`),
+  createQuestion: (q: { text: string; category?: string }) =>
+    request<InterviewQuestion>('POST', '/api/interview/questions', q),
+  updateQuestion: (id: string, q: { text?: string; category?: string }) =>
+    request<InterviewQuestion>('PATCH', `/api/interview/questions/${id}`, q),
+  deleteQuestion: (id: string) => request<void>('DELETE', `/api/interview/questions/${id}`),
+  setHidden: (ref: string, hidden: boolean) =>
+    request<{ ref: string; hidden: boolean }>('PUT', `/api/interview/questions/${encodeURIComponent(ref)}/hidden`, { hidden }),
+  listAnswers: (ref: string) =>
+    request<InterviewAnswer[]>('GET', `/api/interview/answers?question_ref=${encodeURIComponent(ref)}`),
+  createAnswer: (a: AnswerInput) => request<InterviewAnswer>('POST', '/api/interview/answers', a),
+  updateAnswer: (id: number, a: Partial<StarParts>) =>
+    request<InterviewAnswer>('PATCH', `/api/interview/answers/${id}`, a),
+  deleteAnswer: (id: number) => request<void>('DELETE', `/api/interview/answers/${id}`),
+  draftAnswer: (question_ref: string) =>
+    request<AnswerDraft>('POST', '/api/interview/draft', { question_ref }),
 
   propose: (job_id: number | null, message: string, history: ChatTurn[]) =>
     request<ProposalReply>('POST', '/api/ai/propose', { job_id, message, history }),

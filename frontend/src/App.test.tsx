@@ -8,7 +8,7 @@ describe('App', () => {
   it('renders the nav', () => {
     render(<MemoryRouter><App /></MemoryRouter>)
     expect(screen.getByText(/resumaker/i)).toBeInTheDocument()
-    for (const n of ['Resumes', 'Record', 'Profile', 'Settings'])
+    for (const n of ['Resumes', 'Record', 'Interview', 'Profile', 'Settings'])
       expect(screen.getByRole('link', { name: n })).toBeInTheDocument()
   })
 })

@@ -2,6 +2,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 import { cn } from '@/lib/utils'
 import JobPage from '@/pages/JobPage'
+import Interview from '@/pages/Interview'
 import Profile from '@/pages/Profile'
 import Record from '@/pages/Record'
 import Editor from '@/pages/Editor'
@@ -17,7 +18,7 @@ const link = ({ isActive }: { isActive: boolean }) =>
 
 function App() {
   const path = useLocation().pathname
-  const width = path.startsWith('/applications/') ? 'max-w-7xl' : path === '/resumes' ? 'max-w-5xl' : 'max-w-3xl'
+  const width = path.startsWith('/applications/') ? 'max-w-7xl' : path === '/resumes' || path === '/interview' ? 'max-w-5xl' : 'max-w-3xl'
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border">
@@ -25,6 +26,7 @@ function App() {
           <span className="mr-4 font-semibold">Resumaker</span>
           <NavLink to="/resumes" className={link}>Resumes</NavLink>
           <NavLink to="/record" className={link}>Record</NavLink>
+          <NavLink to="/interview" className={link}>Interview</NavLink>
           <NavLink to="/profile" className={link}>Profile</NavLink>
           <NavLink to="/settings" className={cn(link, 'ml-auto')}>Settings</NavLink>
         </nav>
@@ -37,6 +39,7 @@ function App() {
           <Route path="/applications/:id" element={<Editor />} />
           <Route path="/record" element={<Record />} />
           <Route path="/record/jobs/:id" element={<JobPage />} />
+          <Route path="/interview" element={<Interview />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
