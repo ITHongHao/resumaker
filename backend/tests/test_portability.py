@@ -160,3 +160,40 @@ def test_import_interview_failure_leaves_interview_unchanged(client):
     bad = {**doc, "interview_questions": doc["interview_questions"] * 2}  # duplicate ids
     assert client.post("/api/import", json=bad).status_code == 422
     assert client.get("/api/interview/answers").json() == before
+
+
+def test_import_remaps_each_answer_to_its_own_question(client):
+    doc = {"schema_version": 2, "profile": {}, "jobs": [], "cards": [],
+           "interview_questions": [{"id": 2, "text": "Two?"}, {"id": 1, "text": "One?"}],
+           "interview_answers": [{"question_ref": "c:1", "situation": "for-one"},
+                                 {"question_ref": "c:2", "situation": "for-two"}]}
+    for _ in range(2):  # twice: the second import reuses/changes ids again
+        assert client.post("/api/import", json=doc).status_code == 200
+        text_by_ref = {r["ref"]: r["text"] for r in client.get("/api/interview/questions").json()
+                       if not r.get("builtin")}
+        for a in client.get("/api/interview/answers").json():
+            expected = "One?" if a["situation"] == "for-one" else "Two?"
+            assert text_by_ref[a["question_ref"]] == expected
+
+
+def test_import_failure_after_deletes_rolls_back_everything(client, monkeypatch):
+    _seed(client)
+    _seed_interview(client)
+    doc = client.get("/api/export").json()
+    snap = lambda: (client.get("/api/export").json())
+    before = snap()
+    from app.routes import portability
+
+    def boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(portability, "_resolve_ref", boom)  # runs after the deletes and inserts
+    doc["hidden_questions"] = ["c:1"]
+    doc["jobs"][0]["company"] = "Changed"
+    try:
+        r = client.post("/api/import", json=doc)
+        assert r.status_code >= 500
+    except RuntimeError:
+        pass
+    monkeypatch.undo()
+    assert snap() == before

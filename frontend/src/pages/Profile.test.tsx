@@ -75,6 +75,20 @@ describe('Profile import', () => {
     expect(server.calls.some((c) => c.path === '/api/import')).toBe(false)
   })
 
+  it('accepts a v2 export (confirm shown) and still accepts v1', async () => {
+    const v2 = { ...doc, schema_version: 2, interview_questions: [], interview_answers: [], hidden_questions: [] }
+    const { server } = await pick(JSON.stringify(v2))
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('2 jobs, 3 cards')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(server.calls.some((c) => c.path === '/api/import')).toBe(false)
+  })
+
+  it('rejects schema_version 3', async () => {
+    await pick(JSON.stringify({ ...doc, schema_version: 3 }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/schema_version/i)
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
   it('shows a readable error on a failed import and leaves the page unchanged', async () => {
     const { server, user } = await pick(JSON.stringify(doc))
     server.override = ({ method, path }) =>

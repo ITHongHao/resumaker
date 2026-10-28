@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-const SUPPORTED_SCHEMA_VERSION = 1
+const SUPPORTED_SCHEMA_VERSIONS = [1, 2]
 
 export default function Profile() {
   const [p, setP] = useState<ProfileT | null>(null)
@@ -53,9 +53,9 @@ export default function Profile() {
       setError('That file is not valid JSON.')
       return
     }
-    if (doc === null || typeof doc !== 'object' || doc.schema_version !== SUPPORTED_SCHEMA_VERSION) {
+    if (doc === null || typeof doc !== 'object' || !SUPPORTED_SCHEMA_VERSIONS.includes(doc.schema_version as number)) {
       setError(
-        `Unsupported or missing schema_version (${String((doc as { schema_version?: unknown } | null)?.schema_version ?? 'missing')}); expected ${SUPPORTED_SCHEMA_VERSION}. Nothing was imported.`,
+        `Unsupported or missing schema_version (${String((doc as { schema_version?: unknown } | null)?.schema_version ?? 'missing')}); expected ${SUPPORTED_SCHEMA_VERSIONS.join(' or ')}. Nothing was imported.`,
       )
       return
     }

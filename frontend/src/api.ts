@@ -263,7 +263,7 @@ export const api = {
   putSettings: (s: SettingsIn) => request<SettingsOut>('PUT', '/api/settings', s),
 
   exportAll: () => request<unknown>('GET', '/api/export'),
-  importAll: (doc: unknown) => request<{ jobs: number; cards: number }>('POST', '/api/import', doc),
+  importAll: (doc: unknown) => request<{ jobs: number; cards: number; interview_answers: number }>('POST', '/api/import', doc),
 
   createPosting: (form: FormData) => request<Posting>('POST', '/api/postings', form),
   listApplications: (q: { q?: string; status?: ApplicationStatus | '' } = {}) => {
