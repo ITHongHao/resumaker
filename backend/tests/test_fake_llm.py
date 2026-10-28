@@ -1,4 +1,3 @@
-import json
 
 import pytest
 
@@ -112,4 +111,3 @@ def test_output_is_deterministic():
 def test_unknown_prompt_is_an_error():
     with pytest.raises(ValueError):
         FakeLLM().complete("something else", "x")
-    json.loads  # keep import used

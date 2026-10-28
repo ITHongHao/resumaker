@@ -13,7 +13,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8000',
+      // RESUMAKER_API_URL lets the end-to-end run point the proxy at its own backend.
+      '/api': process.env.RESUMAKER_API_URL ?? 'http://localhost:8000',
     },
   },
   test: {
