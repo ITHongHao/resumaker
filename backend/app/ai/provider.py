@@ -15,6 +15,12 @@ MAX_TOKENS = 16000
 MAX_RETRIES = 1
 TIMEOUT_SECONDS = 45.0
 CONNECT_TIMEOUT_SECONDS = 5.0
+# A local model can take minutes on a long prompt, so the custom provider waits much longer and
+# does not retry (a retry would just double a long wait).
+CUSTOM_TIMEOUT_SECONDS = 600.0
+CUSTOM_MAX_RETRIES = 0
+# Sent when the custom server needs no key; the OpenAI SDK refuses an empty one.
+CUSTOM_PLACEHOLDER_KEY = "not-needed"
 
 # Fixed, user-facing messages. They never include the key, provider error text or request content.
 MSG_AUTH = "The AI provider rejected the API key. Check the key in Settings."
@@ -30,6 +36,8 @@ MSG_BAD_REQUEST = ("The AI provider rejected the request, usually because it is 
 MSG_SERVER = "The AI provider is having trouble right now. Try again in a minute."
 MSG_TIMEOUT = "The AI provider took too long to answer. Try again."
 MSG_CONNECTION = "Could not reach the AI provider. Check your internet connection and try again."
+MSG_CONNECTION_CUSTOM = ("Could not reach the custom AI server. Check that it is running and that the "
+                         "Base URL in Settings is right.")
 MSG_FAILED = "The AI provider request failed. Try again."
 MSG_TRUNCATED = ("The AI's answer was cut off before it finished (it ran out of room). Try again; if it "
                  "keeps happening, use shorter input.")
@@ -101,7 +109,7 @@ def _openai_effort_ok(model: str) -> bool:
     return re.match(r"^(gpt-5|o\d)", model.strip()) is not None
 
 
-def _provider_error(e: Exception, sdk: Any) -> AIError:
+def _provider_error(e: Exception, sdk: Any, custom: bool = False) -> AIError:
     """A fixed readable message per failure kind. Order matters: the timeout class is a
     subclass of the connection class, and 413 has its own class in the Anthropic SDK."""
     def isa(*names: str) -> bool:
@@ -111,7 +119,7 @@ def _provider_error(e: Exception, sdk: Any) -> AIError:
     if isa("APITimeoutError"):
         return AIError(MSG_TIMEOUT)
     if isa("APIConnectionError"):
-        return AIError(MSG_CONNECTION)
+        return AIError(MSG_CONNECTION_CUSTOM if custom else MSG_CONNECTION)
     if isa("AuthenticationError"):
         return AIError(MSG_AUTH)
     if isa("PermissionDeniedError"):
@@ -182,15 +190,23 @@ class AnthropicLLM:
 
 
 class OpenAILLM:
-    def __init__(self, api_key: str, model: str, client: Any = None):
+    """OpenAI chat completions. With `base_url` it talks to any OpenAI-compatible server instead
+    (Ollama, LM Studio, vLLM, llama.cpp, ...): longer timeout, no retry, no reasoning_effort."""
+
+    def __init__(self, api_key: str, model: str, client: Any = None, base_url: str | None = None):
         self.model = model
+        self.custom = bool(base_url)
         if client is None:
             import httpx
             import openai
 
             client = openai.OpenAI(
-                api_key=api_key, max_retries=MAX_RETRIES,
-                timeout=httpx.Timeout(TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS))
+                api_key=api_key or CUSTOM_PLACEHOLDER_KEY,
+                base_url=base_url or None,
+                max_retries=CUSTOM_MAX_RETRIES if self.custom else MAX_RETRIES,
+                timeout=httpx.Timeout(
+                    CUSTOM_TIMEOUT_SECONDS if self.custom else TIMEOUT_SECONDS,
+                    connect=CONNECT_TIMEOUT_SECONDS))
         self._client = client
 
     def complete(self, system, user, images=[], json_schema=None) -> str:
@@ -218,14 +234,14 @@ class OpenAILLM:
                 # mode applies and the model cannot add fields (such as a free-form `extra`).
                 "json_schema": {"name": "response", "schema": json_schema, "strict": True},
             }
-        if _openai_effort_ok(self.model):
+        if not self.custom and _openai_effort_ok(self.model):
             kwargs["reasoning_effort"] = _effort(system)
         try:
             resp = self._client.chat.completions.create(**kwargs)
         except Exception as e:
             import openai
 
-            raise _provider_error(e, openai) from None
+            raise _provider_error(e, openai, custom=self.custom) from None
         choice = resp.choices[0]
         finish = getattr(choice, "finish_reason", None)
         if finish == "length":
@@ -242,6 +258,11 @@ def get_llm(settings: AppSettings, keystore: KeyStore) -> LLM:
         from app.ai.fake import FakeLLM
 
         return FakeLLM()
+    if settings.provider == "custom":
+        if not settings.base_url or not settings.model:
+            raise AIError("The custom AI provider needs a Base URL and a model name in Settings.")
+        # The key is optional: many local servers do not check one.
+        return OpenAILLM(keystore.get("custom") or "", settings.model, base_url=settings.base_url)
     key = keystore.get(settings.provider)
     if not key:
         raise NoKeyError(settings.provider)

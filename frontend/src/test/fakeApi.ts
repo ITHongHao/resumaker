@@ -11,7 +11,7 @@ export interface FakeServer {
   jobs: Job[]
   cards: Card[]
   calls: { method: string; path: string; body: any; search?: string }[]
-  settings: { provider: string; model: string; has_key: boolean }
+  settings: { provider: string; model: string; base_url: string; has_key: boolean }
   override?: Handler
 }
 
@@ -20,7 +20,7 @@ export function installFakeApi(init: Partial<Pick<FakeServer, 'jobs' | 'cards'>>
     jobs: init.jobs ?? [],
     cards: init.cards ?? [],
     calls: [],
-    settings: { provider: 'anthropic', model: 'claude-sonnet-4-5', has_key: false },
+    settings: { provider: 'anthropic', model: 'claude-sonnet-4-5', base_url: '', has_key: false },
   }
   let nextId = 100
   vi.stubGlobal(

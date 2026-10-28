@@ -111,7 +111,7 @@ class Profile(ProfileBase, table=True):
     id: int = Field(default=1, primary_key=True)
 
 
-Provider = Literal["anthropic", "openai"]
+Provider = Literal["anthropic", "openai", "custom"]
 
 
 class AppSettings(SQLModel, table=True):
@@ -122,6 +122,8 @@ class AppSettings(SQLModel, table=True):
         default="anthropic", sa_column=Column(String, nullable=False)
     )
     model: str = ""
+    # Only used by the "custom" provider (an OpenAI-compatible server, e.g. a local model).
+    base_url: str = ""
 
 
 class Requirement(SQLModel):

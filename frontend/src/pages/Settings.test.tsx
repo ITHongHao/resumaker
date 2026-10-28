@@ -43,4 +43,24 @@ describe('Settings', () => {
     const put = server.calls.find((c) => c.method === 'PUT')!
     expect('api_key' in put.body).toBe(false)
   })
+
+  it('shows Base URL only for the custom provider and sends it', async () => {
+    const server = installFakeApi()
+    const user = userEvent.setup()
+    render(<Settings />)
+    await screen.findByText(/no key saved/i)
+    expect(screen.queryByLabelText(/base url/i)).toBeNull()
+    await user.selectOptions(screen.getByLabelText(/ai provider/i), 'custom')
+    await user.clear(screen.getByLabelText(/^model/i))
+    await user.type(screen.getByLabelText(/^model/i), 'llama3.1')
+    await user.type(screen.getByLabelText(/base url/i), 'http://localhost:11434/v1')
+    await user.click(screen.getByRole('button', { name: /save/i }))
+    await screen.findByText(/settings saved/i)
+    const put = server.calls.find((c) => c.method === 'PUT')!
+    expect(put.body).toEqual({
+      provider: 'custom',
+      model: 'llama3.1',
+      base_url: 'http://localhost:11434/v1',
+    })
+  })
 })

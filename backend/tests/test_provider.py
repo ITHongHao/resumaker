@@ -303,3 +303,36 @@ def test_real_clients_use_one_retry_and_a_bounded_timeout(monkeypatch):
         total = kw["timeout"] if isinstance(kw["timeout"], float) else kw["timeout"].read
         assert total * (kw["max_retries"] + 1) <= 95
     assert provider_mod.DEFAULT_MODELS == {"anthropic": "claude-sonnet-5-5", "openai": "gpt-5.5"}
+
+
+def test_custom_provider_uses_base_url_long_timeout_no_retry_no_effort(monkeypatch):
+    seen = {}
+
+    class Spy:
+        def __init__(self, **kw):
+            seen.update(kw)
+
+    monkeypatch.setattr(openai, "OpenAI", Spy)
+    llm = get_llm(AppSettings(provider="custom", model="llama3", base_url="http://localhost:11434/v1"),
+                  MemKeys({}))
+    assert isinstance(llm, OpenAILLM) and llm.model == "llama3"
+    assert seen["base_url"] == "http://localhost:11434/v1"
+    assert seen["api_key"] == provider_mod.CUSTOM_PLACEHOLDER_KEY  # no key saved: still non-empty
+    assert seen["max_retries"] == 0 and seen["timeout"].read == provider_mod.CUSTOM_TIMEOUT_SECONDS
+    client, rec = openai_client()
+    OpenAILLM("", "gpt-5-local", client=client, base_url="http://x/v1").complete("S", "U")
+    assert "reasoning_effort" not in rec.calls[0]
+    get_llm(AppSettings(provider="custom", model="m", base_url="http://h/v1"), MemKeys({"custom": "k1"}))
+    assert seen["api_key"] == "k1"
+
+
+def test_custom_provider_needs_url_and_model_and_has_its_own_connection_message():
+    with pytest.raises(AIError):
+        get_llm(AppSettings(provider="custom", model="m", base_url=""), MemKeys({}))
+    with pytest.raises(AIError):
+        get_llm(AppSettings(provider="custom", model="", base_url="http://h/v1"), MemKeys({}))
+    err = openai.APIConnectionError(request=REQ)
+    client, _ = openai_client(error=err)
+    with pytest.raises(AIError) as e:
+        OpenAILLM("", "m", client=client, base_url="http://h/v1").complete("S", "U")
+    assert str(e.value) == provider_mod.MSG_CONNECTION_CUSTOM

@@ -46,15 +46,17 @@ export interface Profile {
   work_authorization: string
 }
 
-export type Provider = 'anthropic' | 'openai'
+export type Provider = 'anthropic' | 'openai' | 'custom'
 export interface SettingsOut {
   provider: Provider
   model: string
+  base_url: string
   has_key: boolean
 }
 export interface SettingsIn {
   provider: Provider
   model: string
+  base_url?: string
   api_key?: string
 }
 

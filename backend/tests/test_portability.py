@@ -29,7 +29,7 @@ def test_export_then_import_restores_record(client):
     assert client.get("/api/profile").json() == profile
     # settings untouched by import
     assert client.get("/api/settings").json() == {
-        "provider": "anthropic", "model": "keep", "has_key": False}
+        "provider": "anthropic", "model": "keep", "base_url": "", "has_key": False}
     assert client.get("/api/export").json() == doc
 
 

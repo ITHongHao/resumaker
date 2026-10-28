@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 export default function Settings() {
   const [provider, setProvider] = useState<Provider>('anthropic')
   const [model, setModel] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
   const [hasKey, setHasKey] = useState<boolean | null>(null)
   const [apiKey, setApiKey] = useState('') // write-only: never populated from the server
   const [msg, setMsg] = useState<string | null>(null)
@@ -19,6 +20,7 @@ export default function Settings() {
       .then((s) => {
         setProvider(s.provider)
         setModel(s.model)
+        setBaseUrl(s.base_url)
         setHasKey(s.has_key)
       })
       .catch((e: Error) => setError(e.message))
@@ -28,9 +30,14 @@ export default function Settings() {
     setMsg(null)
     setError(null)
     try {
-      const s = await api.putSettings({ provider, model, ...(apiKey ? { api_key: apiKey } : {}) })
+      const s = await api.putSettings({
+        provider,
+        model,
+        ...(provider === 'custom' ? { base_url: baseUrl } : {}),
+        ...(apiKey ? { api_key: apiKey } : {}) })
       setProvider(s.provider)
       setModel(s.model)
+      setBaseUrl(s.base_url)
       setHasKey(s.has_key)
       setApiKey('')
       setMsg('Settings saved.')
@@ -59,14 +66,35 @@ export default function Settings() {
           >
             <option value="anthropic">Anthropic</option>
             <option value="openai">OpenAI</option>
+            <option value="custom">Custom (OpenAI-compatible)</option>
           </select>
         </div>
+        {provider === 'custom' && (
+          <div className="space-y-1">
+            <Label htmlFor="base-url">Base URL</Label>
+            <Input
+              id="base-url"
+              placeholder="http://localhost:11434/v1"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Any server that speaks the OpenAI chat completions API (Ollama, LM Studio, vLLM,
+              llama.cpp). Requests go only to this address.
+            </p>
+          </div>
+        )}
         <div className="space-y-1">
           <Label htmlFor="model">Model</Label>
-          <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} />
+          <Input
+            id="model"
+            placeholder={provider === 'custom' ? 'Required, e.g. llama3.1' : undefined}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+          />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="api-key">API key</Label>
+          <Label htmlFor="api-key">API key{provider === 'custom' ? ' (optional)' : ''}</Label>
           <Input
             id="api-key"
             type="password"

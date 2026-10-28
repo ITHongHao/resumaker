@@ -7,11 +7,12 @@ from app.keystore import FileKeyStore, home_dir
 
 def test_settings_never_returns_key(client, tmp_path, caplog):
     assert client.get("/api/settings").json() == {
-        "provider": "anthropic", "model": "", "has_key": False}
+        "provider": "anthropic", "model": "", "base_url": "", "has_key": False}
     r = client.put("/api/settings", json={
         "provider": "anthropic", "model": "m1", "api_key": "sk-secret-123"})
     assert r.status_code == 200
-    assert r.json() == {"provider": "anthropic", "model": "m1", "has_key": True}
+    assert r.json() == {
+        "provider": "anthropic", "model": "m1", "base_url": "", "has_key": True}
     got = client.get("/api/settings")
     assert "sk-secret-123" not in got.text and "api_key" not in got.json()
     assert "sk-secret-123" not in r.text
@@ -67,3 +68,20 @@ def test_profile_roundtrip(client):
     assert client.get("/api/profile").json() == body
     assert client.put("/api/profile", json={**body, "name": None}).status_code == 422
     assert client.get("/api/profile").json() == body
+
+
+def test_custom_provider_settings_validate_url_and_need_no_key(client):
+    ok = client.put("/api/settings", json={
+        "provider": "custom", "model": "llama3", "base_url": " http://localhost:11434/v1/ "})
+    assert ok.status_code == 200
+    assert ok.json() == {
+        "provider": "custom", "model": "llama3", "base_url": "http://localhost:11434/v1",
+        "has_key": False}
+    for body in (
+        {"provider": "custom", "model": "m", "base_url": ""},
+        {"provider": "custom", "model": "m", "base_url": "localhost:11434"},
+        {"provider": "custom", "model": "m", "base_url": "file:///etc/passwd"},
+        {"provider": "custom", "model": "  ", "base_url": "http://localhost:1/v1"},
+        {"provider": "openai", "model": "m", "base_url": "ftp://x"},
+    ):
+        assert client.put("/api/settings", json=body).status_code == 422, body
