@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import Field as PydanticField
 from sqlalchemy import JSON, Column, String
 from sqlmodel import Field, SQLModel
 
@@ -94,3 +95,25 @@ class AppSettings(SQLModel, table=True):
         default="anthropic", sa_column=Column(String, nullable=False)
     )
     model: str = ""
+
+
+class Requirement(SQLModel):
+    term: str
+    kind: Literal["skill", "tool", "responsibility", "qualification"]
+    weight: int = PydanticField(ge=1, le=3)
+
+
+class PostingBase(SQLModel):
+    source_kind: Literal["url", "text", "html", "image"]
+    raw_text: str = ""
+    title: str = ""
+    company: str = ""
+
+
+class Posting(PostingBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    source_kind: Literal["url", "text", "html", "image"] = Field(
+        sa_column=Column(String, nullable=False)
+    )
+    # List of Requirement dicts.
+    requirements: list[dict] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
