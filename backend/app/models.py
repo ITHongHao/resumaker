@@ -19,7 +19,7 @@ def known_extra(kind: str | None, extra) -> dict[str, str]:
     Unknown keys and non-string values are dropped."""
     if not isinstance(extra, dict):
         return {}
-    known = {f["key"] for f in recordfields.load().get(kind or "", []) if not f.get("column")}
+    known = recordfields.extra_keys(kind or "")
     cleaned = recordfields.clean_extra(kind or "", extra)
     return {k: v for k, v in cleaned.items() if k in known}
 

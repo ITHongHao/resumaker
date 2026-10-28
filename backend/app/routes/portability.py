@@ -11,6 +11,7 @@ SCHEMA_VERSION = 1
 
 class JobDoc(JobBase):
     id: int
+    extra: dict = {}
 
 
 class CardDoc(CardBase):

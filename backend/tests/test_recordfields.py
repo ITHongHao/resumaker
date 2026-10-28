@@ -29,7 +29,7 @@ def test_clean_extra_caps_strips_and_keeps_unknown():
     assert "notes" not in out
 
 
-def test_yesno_rejects_other_values():
+def test_yesno_drops_other_values():
     assert recordfields.clean_extra("job", {"ok_to_contact": "yes"}) == {"ok_to_contact": "yes"}
     assert recordfields.clean_extra("job", {"ok_to_contact": "no"}) == {"ok_to_contact": "no"}
     assert recordfields.clean_extra("job", {"ok_to_contact": "maybe", "currently_here": "true"}) == {}

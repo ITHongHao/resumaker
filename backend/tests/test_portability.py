@@ -50,3 +50,20 @@ def test_import_bad_data_rolls_back(client):
     bad = {**doc, "cards": [{"id": 9, "job_id": 4242, "kind": "skill", "title": "x"}]}
     assert client.post("/api/import", json=bad).status_code == 422
     assert client.get("/api/cards").json() == before
+
+
+def test_job_extra_survives_export_and_import(client):
+    jid = client.post("/api/jobs", json={"company": "A", "title": "T",
+                                         "extra": {"salary": "90k"}}).json()["id"]
+    doc = client.get("/api/export").json()
+    assert doc["jobs"][0]["extra"] == {"salary": "90k"}
+    client.delete(f"/api/jobs/{jid}")
+    assert client.post("/api/import", json=doc).status_code == 200
+    assert client.get("/api/jobs").json()[0]["extra"] == {"salary": "90k"}
+
+
+def test_old_export_without_job_extra_still_imports(client):
+    doc = {"schema_version": 1, "profile": {}, "cards": [],
+           "jobs": [{"id": 1, "company": "A", "title": "T"}]}
+    assert client.post("/api/import", json=doc).status_code == 200
+    assert client.get("/api/jobs").json()[0]["extra"] == {}

@@ -20,6 +20,11 @@ def _extra_fields(section: str) -> list[dict]:
     return [f for f in load().get(section, []) if not f.get("column")]
 
 
+def extra_keys(section: str) -> frozenset[str]:
+    """Keys of the fields stored in `extra` (excludes table columns)."""
+    return frozenset(f["key"] for f in _extra_fields(section))
+
+
 def keys(section: str) -> tuple[str, ...]:
     return tuple(f["key"] for f in load().get(section, []))
 
