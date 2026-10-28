@@ -1,11 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { CardDraft, CardKind } from '@/api'
+import AddFieldMenu from '@/components/AddFieldMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { EXTRA_FIELDS, JOBLESS_ACCOMPLISHMENT, knownExtra, MAX_EXTRA_CHARS } from '@/lib/cardFields'
+import {
+  type FieldDef,
+  fieldsFor,
+  JOBLESS_ACCOMPLISHMENT,
+  KNOWN_KEYS,
+  knownExtra,
+  MAX_EXTRA_CHARS,
+  TITLE_LABELS,
+  visibleKeys,
+} from '@/lib/recordFields'
 
 export const KIND_LABELS: Record<CardKind, string> = {
   project: 'Project',
@@ -19,11 +29,79 @@ export const KIND_LABELS: Record<CardKind, string> = {
 const selectClass =
   'h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50'
 
-const ALL_EXTRA_KEYS = new Set(Object.values(EXTRA_FIELDS).flatMap((fs) => fs.map((f) => f.key)))
-
-/** `extra` keys no form field edits (from an import); they are kept as they are. */
+/** `extra` keys no section has a field for (from an import); they are kept as they are. */
 function otherExtra(extra: Record<string, unknown> | undefined): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(extra ?? {}).filter(([k]) => !ALL_EXTRA_KEYS.has(k)))
+  return Object.fromEntries(Object.entries(extra ?? {}).filter(([k]) => !KNOWN_KEYS.has(k)))
+}
+
+const OTHER = 'Other'
+
+function FieldInput({
+  def,
+  value,
+  otherPicked,
+  onChange,
+  onOtherPicked,
+}: {
+  def: FieldDef
+  value: string
+  otherPicked: boolean
+  onChange: (v: string) => void
+  onOtherPicked: (picked: boolean) => void
+}) {
+  const id = `card-${def.key}`
+  if (def.type === 'text') {
+    return <Input id={id} placeholder={def.placeholder} maxLength={MAX_EXTRA_CHARS} value={value} onChange={(e) => onChange(e.target.value)} />
+  }
+  if (def.type === 'yesno') {
+    return (
+      <select id={id} className={selectClass} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="" />
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    )
+  }
+  const options = def.options ?? []
+  const hasOther = options.includes(OTHER)
+  const typed = hasOther && (otherPicked || (value !== '' && !options.includes(value)))
+  // A stored value no longer in the list (a list without "Other") stays selectable.
+  const stray = !hasOther && value !== '' && !options.includes(value)
+  return (
+    <div className="space-y-1.5">
+      <select
+        id={id}
+        className={selectClass}
+        value={typed ? OTHER : value}
+        onChange={(e) => {
+          const v = e.target.value
+          if (v === OTHER) {
+            onOtherPicked(true)
+            onChange('')
+          } else {
+            onOtherPicked(false)
+            onChange(v)
+          }
+        }}
+      >
+        <option value="" />
+        {stray && <option value={value}>{value}</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      {typed && (
+        <Input
+          aria-label={`${def.label} (other)`}
+          maxLength={MAX_EXTRA_CHARS}
+          value={options.includes(value) ? '' : value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </div>
+  )
 }
 
 export function parseTags(s: string): string[] {
@@ -62,13 +140,24 @@ export default function CardForm({
   // Every known field's value, kept across kind switches; only the current kind's are saved.
   const [fields, setFields] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      Object.entries(initial?.extra ?? {}).flatMap(([k, v]) => (ALL_EXTRA_KEYS.has(k) && typeof v === 'string' ? [[k, v]] : [])),
+      Object.entries(initial?.extra ?? {}).flatMap(([k, v]) => (KNOWN_KEYS.has(k) && typeof v === 'string' ? [[k, v]] : [])),
     ),
   )
+  // Fields picked from the Add field menu, and selects whose "Other" box is open.
+  const [added, setAdded] = useState<string[]>([])
+  const [otherPicked, setOtherPicked] = useState<string[]>([])
+  const [focusKey, setFocusKey] = useState<string | null>(null)
+  useEffect(() => {
+    if (focusKey) document.getElementById(`card-${focusKey}`)?.focus()
+  }, [focusKey])
 
   // A project under a job prints as that job's bullets, without its own dates, so its date
   // fields are only offered for a standalone project.
-  const shownFields = kind === 'project' && !jobless ? [] : (EXTRA_FIELDS[kind] ?? [])
+  const defs = fieldsFor(kind).filter((f) => !(kind === 'project' && !jobless && /_date$/.test(f.key)))
+  const shownKeys = new Set([...visibleKeys(defs, fields), ...added])
+  const shownDefs = defs.filter((f) => shownKeys.has(f.key))
+  const menuDefs = defs.filter((f) => !shownKeys.has(f.key))
+  const story = kind === 'project' || kind === 'accomplishment'
 
   return (
     <form
@@ -90,7 +179,7 @@ export default function CardForm({
           extra: {
             ...otherExtra(initial?.extra),
             ...Object.fromEntries(
-              Object.entries(knownExtra(kind, fields)).filter(([k]) => shownFields.some((f) => f.key === k)),
+              Object.entries(knownExtra(kind, fields)).filter(([k]) => shownKeys.has(k) && defs.some((f) => f.key === k)),
             ),
           },
         })
@@ -109,31 +198,38 @@ export default function CardForm({
         </div>
       )}
       <div className="space-y-1">
-        <Label htmlFor="card-title">Title</Label>
+        <Label htmlFor="card-title">{TITLE_LABELS[kind] ?? 'Title'}</Label>
         <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
       </div>
       <div className="space-y-1">
-        <Label htmlFor="card-description">Description</Label>
+        <Label htmlFor="card-description">{story ? 'What it did' : 'Description'}</Label>
         <Textarea id="card-description" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-      {shownFields.length > 0 && (
+      {shownDefs.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-3">
-          {shownFields.map((f) => (
+          {shownDefs.map((f) => (
             <div key={f.key} className="space-y-1">
               <Label htmlFor={`card-${f.key}`}>{f.label}</Label>
-              <Input
-                id={`card-${f.key}`}
-                placeholder={f.placeholder}
-                maxLength={MAX_EXTRA_CHARS}
+              <FieldInput
+                def={f}
                 value={fields[f.key] ?? ''}
-                onChange={(e) => setFields((x) => ({ ...x, [f.key]: e.target.value }))}
+                otherPicked={otherPicked.includes(f.key)}
+                onChange={(v) => setFields((x) => ({ ...x, [f.key]: v }))}
+                onOtherPicked={(p) => setOtherPicked((o) => (p ? [...o, f.key] : o.filter((k) => k !== f.key)))}
               />
             </div>
           ))}
         </div>
       )}
+      <AddFieldMenu
+        available={menuDefs}
+        onPick={(key) => {
+          setAdded((a) => [...a, key])
+          setFocusKey(key)
+        }}
+      />
       <div className="space-y-1">
-        <Label htmlFor="card-details">Details</Label>
+        <Label htmlFor="card-details">{story ? 'Results and numbers' : 'Details'}</Label>
         <Textarea
           id="card-details"
           aria-describedby="card-details-hint"

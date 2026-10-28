@@ -30,8 +30,8 @@ describe('JobPage', () => {
     const user = userEvent.setup()
     renderJob()
     await user.click(await screen.findByRole('button', { name: /add project or accomplishment/i }))
-    await user.type(screen.getByLabelText(/title/i), 'Churn model')
-    await user.type(screen.getByLabelText(/description/i), 'Predicts churn weekly.')
+    await user.type(screen.getByLabelText(/^name$/i), 'Churn model')
+    await user.type(screen.getByLabelText(/what it did/i), 'Predicts churn weekly.')
     await user.type(screen.getByLabelText(/tags/i), 'ML, Airflow')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -50,10 +50,10 @@ describe('JobPage', () => {
     const user = userEvent.setup()
     renderJob()
     await user.click(await screen.findByRole('button', { name: /add project or accomplishment/i }))
-    await user.type(screen.getByLabelText(/title/i), 'x')
+    await user.type(screen.getByLabelText(/^name$/i), 'x')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     expect(await screen.findByRole('alert')).toHaveTextContent('title: Field required')
-    expect(screen.getByLabelText(/title/i)).toHaveValue('x')
+    expect(screen.getByLabelText(/^name$/i)).toHaveValue('x')
   })
 })
 

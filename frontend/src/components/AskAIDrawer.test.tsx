@@ -53,13 +53,13 @@ describe('AskAIDrawer', () => {
     const server = installFakeApi()
     const { user, onAdded } = await ask(server)
     await user.click(screen.getByRole('button', { name: /^edit$/i }))
-    expect(screen.getByLabelText(/title/i)).toHaveValue('Onboarding redesign')
-    expect(screen.getByLabelText(/description/i)).toHaveValue('Redesigned onboarding in React.')
+    expect(screen.getByLabelText(/^name$/i)).toHaveValue('Onboarding redesign')
+    expect(screen.getByLabelText(/what it did/i)).toHaveValue('Redesigned onboarding in React.')
     expect(screen.getByLabelText(/tags/i)).toHaveValue('React')
     expect(server.calls.some((c) => c.method === 'POST' && c.path === '/api/cards')).toBe(false)
 
-    await user.clear(screen.getByLabelText(/title/i))
-    await user.type(screen.getByLabelText(/title/i), 'Onboarding v2')
+    await user.clear(screen.getByLabelText(/^name$/i))
+    await user.type(screen.getByLabelText(/^name$/i), 'Onboarding v2')
     await user.click(screen.getByRole('button', { name: /^save$/i }))
     const post = server.calls.find((c) => c.method === 'POST' && c.path === '/api/cards')!
     expect(post.body).toMatchObject({ title: 'Onboarding v2', job_id: 1 })

@@ -16,6 +16,8 @@ export interface Job {
   end_date: string
   manager_contact: string
   reason_for_leaving: string
+  /** Stored-only fields (manager, salary and so on); see shared/record-fields.json. */
+  extra?: Record<string, unknown>
 }
 export type JobInput = Omit<Job, 'id'>
 

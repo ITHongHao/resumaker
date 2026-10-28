@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api, type Card, type CardKind, type Job } from '@/api'
 import CardSection from '@/components/CardSection'
 import JobForm from '@/components/JobForm'
-import { JOBLESS_KINDS } from '@/lib/cardFields'
+import { JOBLESS_KINDS } from '@/lib/recordFields'
 
 const SECTIONS: { kind: CardKind; title: string; add: string }[] = [
   { kind: 'education', title: 'Education', add: 'Add education' },

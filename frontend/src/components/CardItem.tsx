@@ -1,6 +1,6 @@
 import type { Card } from '@/api'
 import { Button } from '@/components/ui/button'
-import { EXTRA_FIELDS, knownExtra } from '@/lib/cardFields'
+import { fieldsFor, knownExtra } from '@/lib/recordFields'
 
 export function TagChips({ tags }: { tags: string[] }) {
   if (!tags.length) return null
@@ -17,7 +17,7 @@ export function TagChips({ tags }: { tags: string[] }) {
 
 function CardExtra({ card }: { card: Card }) {
   const values = knownExtra(card.kind, card.extra)
-  const fields = (EXTRA_FIELDS[card.kind] ?? []).filter((f) => values[f.key])
+  const fields = fieldsFor(card.kind).filter((f) => values[f.key])
   if (!fields.length) return null
   return (
     <dl className="mb-2.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">

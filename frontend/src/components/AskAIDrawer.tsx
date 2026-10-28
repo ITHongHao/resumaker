@@ -4,13 +4,13 @@ import { api, type Card, type CardDraft, type ChatTurn, type Job } from '@/api'
 import CardForm, { KIND_LABELS } from '@/components/CardForm'
 import { TagChips } from '@/components/CardItem'
 import { Button } from '@/components/ui/button'
-import { EXTRA_FIELDS, JOB_KINDS, JOBLESS_ACCOMPLISHMENT, JOBLESS_KINDS, knownExtra } from '@/lib/cardFields'
+import { fieldsFor, JOB_KINDS, JOBLESS_ACCOMPLISHMENT, JOBLESS_KINDS, knownExtra } from '@/lib/recordFields'
 
 type Msg = { role: 'user' | 'assistant'; text: string; proposals?: CardDraft[]; followups?: string[] }
 
 function ExtraList({ kind, extra }: { kind: CardDraft['kind']; extra: CardDraft['extra'] }) {
   const shown = knownExtra(kind, extra)
-  const fields = (EXTRA_FIELDS[kind] ?? []).filter((f) => shown[f.key])
+  const fields = fieldsFor(kind).filter((f) => shown[f.key])
   if (!fields.length) return null
   return (
     <dl className="my-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">

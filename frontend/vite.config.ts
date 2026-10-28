@@ -8,9 +8,13 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: { '@': path.resolve(import.meta.dirname, './src') },
+    alias: {
+      '@': path.resolve(import.meta.dirname, './src'),
+      '@shared': path.resolve(import.meta.dirname, '../shared'),
+    },
   },
   server: {
+    fs: { allow: ['..'] },
     port: 5173,
     proxy: {
       // RESUMAKER_API_URL lets the end-to-end run point the proxy at its own backend.

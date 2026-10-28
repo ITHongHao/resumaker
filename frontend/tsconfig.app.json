@@ -5,7 +5,8 @@
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"],
-    "paths": { "@/*": ["./src/*"] },
+    "paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] },
+    "resolveJsonModule": true,
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
 
