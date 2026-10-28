@@ -6,10 +6,11 @@ is deterministic and makes no AI call. All AI work finishes before anything is w
 a failure leaves no Application or ResumeVersion behind.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from sqlmodel import Session, SQLModel, col, select
 
 from app.ai.provider import LLM, AIError
@@ -45,6 +46,14 @@ from app.scoring import RequirementMatch, score
 router = APIRouter(prefix="/api/applications")
 
 
+def _as_utc(value: datetime) -> datetime:
+    """SQLite drops the offset; stored times are UTC, so say so (ISO-8601 with +00:00)."""
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+UtcDatetime = Annotated[datetime, AfterValidator(_as_utc)]
+
+
 class CreateIn(BaseModel):
     posting_id: int
 
@@ -70,7 +79,7 @@ class VersionOut(BaseModel):
     tex: str
     bullets: list[BulletOut]
     record_hash: str
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class PostingRef(BaseModel):
@@ -83,7 +92,7 @@ class ApplicationOut(BaseModel):
     id: int
     posting_id: int
     status: ApplicationStatus
-    created_at: datetime
+    created_at: UtcDatetime
     posting: PostingRef
     version: VersionOut
     score: int
@@ -98,12 +107,14 @@ class ApplicationSummary(BaseModel):
     id: int
     posting_id: int
     status: ApplicationStatus
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime  # the latest version's created time
     title: str
     company: str
     score: int
     version: int
+    stale: bool
+    format: Literal["tex"] = "tex"
 
 
 class ScoreOut(BaseModel):
@@ -128,6 +139,11 @@ def _latest(session: Session, app_id: int) -> ResumeVersion:
     if version is None:  # versions are created with the application, so this is a broken row
         raise HTTPException(404, "Application has no resume")
     return version
+
+
+def _is_stale(version: ResumeVersion, current_hash: str) -> bool:
+    """The Record changed since this version's snapshot. `current_hash` is record_hash(session)."""
+    return version.record_hash != current_hash
 
 
 def _suggestions(version: ResumeVersion) -> list[Suggestion]:
@@ -157,7 +173,7 @@ def _detail(session: Session, application: Application) -> ApplicationOut:
         potential=potential(reqs, latest.tex, active),
         suggestions=active,
         uncovered=uncovered(missing, _all(session, Card)),
-        stale=latest.record_hash != record_hash(session),
+        stale=_is_stale(latest, record_hash(session)),
     )
 
 
@@ -230,6 +246,7 @@ def list_applications(
         )
         for v in versions:
             latest[v.application_id] = v
+    current_hash = record_hash(session) if latest else ""
     out = [
         ApplicationSummary(
             id=a.id,
@@ -241,6 +258,7 @@ def list_applications(
             company=p.company,
             score=score(requirements_of(p), latest[a.id].tex).score,
             version=latest[a.id].version,
+            stale=_is_stale(latest[a.id], current_hash),
         )
         for a, p in pairs
         if a.id in latest

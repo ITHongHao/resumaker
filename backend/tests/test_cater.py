@@ -495,6 +495,35 @@ def test_status_filter_and_search(client, use_llm, record):
     assert client.patch("/api/applications/999", json={"status": "applied"}).status_code == 404
 
 
+def test_list_items_carry_stale_format_and_aware_updated_at(client, use_llm, record):
+    from datetime import datetime
+
+    use_llm(FakeLLM(*good_replies(record)))
+    app_id = client.post("/api/applications", json={"posting_id": add_posting(POSTING_REQS)}).json()["id"]
+
+    def item():
+        (only,) = [x for x in client.get("/api/applications").json() if x["id"] == app_id]
+        return only
+
+    first = item()
+    assert first["stale"] is False
+    assert first["format"] == "tex"
+    parsed = datetime.fromisoformat(first["updated_at"].replace("Z", "+00:00"))
+    assert parsed.tzinfo is not None and parsed.utcoffset().total_seconds() == 0
+    assert first["updated_at"].endswith(("Z", "+00:00"))
+
+    # A Record change makes the snapshot stale, exactly as GET /api/applications/{id} reports.
+    client.patch(f"/api/cards/{record['webapp']['id']}", json={"description": "Changed."})
+    assert item()["stale"] is True
+    assert client.get(f"/api/applications/{app_id}").json()["stale"] is True
+
+    # A hand-edited version keeps the old snapshot hash, so it is still stale.
+    tex = client.get(f"/api/applications/{app_id}").json()["version"]["tex"]
+    assert client.post(f"/api/applications/{app_id}/versions", json={"tex": tex + "%"}).status_code == 201
+    after = item()
+    assert after["version"] == 2 and after["stale"] is True and after["format"] == "tex"
+
+
 def test_cater_calls_llm_once_per_action(client, use_llm, record):
     llm = use_llm(FakeLLM(*good_replies(record)))
     app_id = client.post("/api/applications", json={"posting_id": add_posting(POSTING_REQS)}).json()["id"]
