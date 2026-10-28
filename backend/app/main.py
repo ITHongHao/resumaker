@@ -1,3 +1,5 @@
+import os
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,6 +14,11 @@ from app.routes import ai, applications, latex, portability, postings, profile, 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    if os.environ.get("RESUMAKER_FAKE_LLM") == "1":
+        # Startup only, on stderr; never in an API response.
+        print("WARNING: RESUMAKER_FAKE_LLM=1 is set. Resumaker is using its built-in fake AI "
+              "(canned, deterministic output) instead of a real provider. For tests and demos only.",
+              file=sys.stderr, flush=True)
     yield
 
 
