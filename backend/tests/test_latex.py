@@ -138,19 +138,29 @@ def test_glyphtounicode_is_guarded():
     assert r"\ifdefined\pdfgentounicode" in pre and "glyphtounicode" in pre
 
 
-def _stub_run(monkeypatch, *, returncode=0, output="", write_pdf=True, raises=None):
+def _stub_run(monkeypatch, *, returncode=0, output="", write_pdf=True, raises=None, pdf=b"%PDF-1.5 stub",
+              before=None):
+    """Stands in for subprocess.run. Output goes where compile_pdf asked for it: into the file
+    objects passed as stdout/stderr, or (older call style) the CompletedProcess."""
     seen = {}
 
     def run(cmd, **kw):
         seen["cmd"], seen["kw"] = cmd, kw
-        if raises:
-            raise raises
         cwd = Path(kw["cwd"])
         seen["cwd"] = cwd
         seen["tex"] = (cwd / "main.tex").read_text(encoding="utf-8")
+        if before:
+            before()
+        out = kw.get("stdout")
+        to_file = hasattr(out, "write")
+        if to_file and output:
+            out.write(output.encode() if isinstance(output, str) else output)
+            out.flush()
+        if raises:
+            raise raises
         if write_pdf:
-            (cwd / "main.pdf").write_bytes(b"%PDF-1.5 stub")
-        return subprocess.CompletedProcess(cmd, returncode, stdout=output, stderr="")
+            (cwd / "main.pdf").write_bytes(pdf)
+        return subprocess.CompletedProcess(cmd, returncode, stdout=None if to_file else output, stderr=None if to_file else "")
 
     monkeypatch.setattr(compile_mod.subprocess, "run", run)
     return seen
@@ -177,9 +187,10 @@ def test_compile_error_cleans_up_and_truncates_log(monkeypatch):
 
 
 def test_compile_maps_timeout_and_missing_binary(monkeypatch):
-    _stub_run(monkeypatch, raises=subprocess.TimeoutExpired("tectonic", 30, output=b"partial"))
-    with pytest.raises(CompileError, match="timed out"):
+    _stub_run(monkeypatch, output="partial-log-line", raises=subprocess.TimeoutExpired("tectonic", 30))
+    with pytest.raises(CompileError, match="timed out") as e:
         compile_pdf("x")
+    assert "partial-log-line" in e.value.log
     _stub_run(monkeypatch, raises=FileNotFoundError("tectonic"))
     with pytest.raises(CompileError, match="brew install tectonic"):
         compile_pdf("x")
@@ -231,3 +242,111 @@ def test_compile_route_garbage_and_size_cap(client, monkeypatch):
     r = client.post("/api/latex/compile", json={"tex": big})
     assert r.status_code == 422 and big[:50] not in r.text
     assert client.post("/api/latex/compile", json={}).status_code == 422
+
+
+# --- output caps and concurrency (stubbed: Tectonic is not installed here) ------------------
+
+
+def test_compile_output_goes_to_files_and_only_the_tail_is_read(monkeypatch):
+    huge = "noise line\n" * 500_000 + "! LaTeX Error: the real problem"  # ~5.5 MB
+    seen = _stub_run(monkeypatch, returncode=1, output=huge, write_pdf=False)
+    reads = []
+    real_read = compile_mod._tail
+    monkeypatch.setattr(compile_mod, "_tail", lambda f: reads.append(1) or real_read(f))
+    with pytest.raises(CompileError) as e:
+        compile_pdf("x")
+    assert "capture_output" not in seen["kw"]
+    assert hasattr(seen["kw"]["stdout"], "write") and seen["kw"]["stderr"] is subprocess.STDOUT
+    assert e.value.log.endswith("the real problem") and len(e.value.log) < 10_000
+    assert reads
+
+
+def test_tail_reads_at_most_the_cap(tmp_path):
+    f = (tmp_path / "out").open("w+b")
+    f.write(b"a" * 1_000_000 + b"END")
+    assert compile_mod._tail(f).endswith("END")
+    assert len(compile_mod._tail(f)) <= compile_mod.MAX_OUTPUT_BYTES
+
+
+def test_oversized_pdf_is_rejected_before_reading(monkeypatch):
+    monkeypatch.setattr(compile_mod, "MAX_PDF_BYTES", 1000)
+    _stub_run(monkeypatch, pdf=b"%PDF" + b"0" * 5000)
+    monkeypatch.setattr(Path, "read_bytes", lambda self: pytest.fail("read an oversized PDF"))
+    with pytest.raises(CompileError, match="larger than"):
+        compile_pdf("x")
+
+
+def test_pdf_cap_is_ten_megabytes():
+    assert compile_mod.MAX_PDF_BYTES == 10 * 1024 * 1024
+
+
+def test_at_most_two_compiles_run_at_once_and_a_third_gets_busy(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(compile_mod, "QUEUE_WAIT_S", 0.2)
+    started = threading.Semaphore(0)
+    release = threading.Event()
+    running = []
+    peak = []
+
+    def hold():
+        running.append(1)
+        peak.append(len(running))
+        started.release()
+        release.wait(5)
+        running.pop()
+
+    _stub_run(monkeypatch, before=hold)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(compile_pdf("x"))) for _ in range(2)]
+    for t in threads:
+        t.start()
+    assert started.acquire(timeout=5) and started.acquire(timeout=5)
+    with pytest.raises(compile_mod.CompilerBusy):
+        compile_pdf("x")
+    release.set()
+    for t in threads:
+        t.join(5)
+    assert len(results) == 2 and max(peak) == 2
+    assert compile_pdf("x").startswith(b"%PDF")  # slots are freed again
+
+
+def test_third_compile_waits_for_a_free_slot(monkeypatch):
+    import threading
+
+    monkeypatch.setattr(compile_mod, "QUEUE_WAIT_S", 5)
+    started = threading.Semaphore(0)
+    release = threading.Event()
+    calls = []
+
+    def hold():
+        calls.append(1)
+        if len(calls) <= 2:
+            started.release()
+            release.wait(5)
+
+    _stub_run(monkeypatch, before=hold)
+    threads = [threading.Thread(target=lambda: compile_pdf("x")) for _ in range(2)]
+    for t in threads:
+        t.start()
+    assert started.acquire(timeout=5) and started.acquire(timeout=5)
+    threading.Timer(0.2, release.set).start()
+    assert compile_pdf("x").startswith(b"%PDF")
+    for t in threads:
+        t.join(5)
+
+
+def test_compile_route_503_when_busy(client, monkeypatch):
+    def busy(_tex):
+        raise compile_mod.CompilerBusy()
+
+    monkeypatch.setattr("app.routes.latex.compile_pdf", busy)
+    r = client.post("/api/latex/compile", json={"tex": "x"})
+    assert r.status_code == 503
+    assert "busy" in r.json()["detail"].lower()
+
+
+def test_untrusted_comment_is_accurate():
+    src = Path(compile_mod.__file__).read_text()
+    assert "other insecure features" not in src
+    assert "shell-escape" in src
