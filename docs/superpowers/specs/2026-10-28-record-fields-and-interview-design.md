@@ -1,7 +1,7 @@
 # Record fields and the Interview tab: Design
 
 Date: 2026-10-28
-Status: Draft for approval
+Status: Approved by the owner (2026-10-28), with the change that answers use the STAR format
 Builds on: `2026-10-27-resumaker-design.md` (the MVP design). Anything not mentioned here keeps working as it does now.
 
 Items marked **(my call)** were decided by the writer, not by the product owner. Everything else came from the product owner.
@@ -75,7 +75,7 @@ Dates stay free text (for example "Aug 2017" or "2021") as today, **(my call)** 
 A new top-level tab beside Record. Layout (mockup reviewed by the owner): a list of questions on the left with category chips and an "answered / not yet" indicator, and the selected question's answers on the right.
 
 - **Questions.** Come from a built-in list of common questions, and the user can add custom questions. Questions have a category. **(my call)** The built-in list is a curated set of about 30 questions in the categories Leadership, Teamwork and conflict, Failure and learning, Initiative, Pressure and deadlines, and Technical experience (technical-facing behavioral, for example "What is the most technical thing you have built?"). Built-in questions cannot be edited; the user can hide one. Custom questions can be edited and deleted.
-- **Answers.** A question has any number of answers. The user can add an answer by hand, or ask the AI to draft one. The user can edit or delete any answer.
+- **Answers.** A question has any number of answers. The user can add an answer by hand, or ask the AI to draft one. The user can edit or delete any answer. Every answer is in the STAR format (owner's requirement): four labelled parts, Situation, Task, Action and Result, each a short text box, shown in that order on the right-hand side. **(my call)** This applies to technical-facing questions too, since they are behavioral questions, and a part may be left empty.
 - **AI drafting.** Opt-in per question: nothing is drafted until the user presses a draft button. The draft is drawn from the Record and shown as a suggestion; it is saved as an answer only when the user presses Accept (Reject discards it). This is the same propose-and-accept rule as the rest of the app. Custom questions can be drafted too, after the user approves the question.
 - **Provenance.** An AI-drafted answer records which Record entries it was built from and shows them under the answer. It must not state facts, numbers or tools that are not in those entries (same rule as resume bullets).
 - **Where the Ask AI drawer fits.** The Ask AI drawer on the Record stays for adding Record entries; it no longer proposes behavioral answers. **(my call)**
@@ -101,9 +101,9 @@ By the owner: Interview is a separate tab; fields are modelled on Greenhouse, Wo
 ## 6. Calls made after the builder check (my call, all of them)
 
 - **Resume output:** as described in 3.1. Existing entries print identically. Stored-only fields do not count as evidence for Auto cater or the match score. Auto cater and scoring already ignore behavioral cards, so moving them changes nothing there.
-- **Old behavioral cards:** the migration copies each into the Interview data and leaves the original row in the database untouched and hidden from the Record, so it can be rolled back. A migrated answer's source entry is the job or project it was linked to, if any. Tags and extra data are kept as notes on the answer.
+- **Old behavioral cards:** the migration copies each into the Interview data and leaves the original row in the database untouched and hidden from the Record, so it can be rolled back. A migrated answer's source entry is the job or project it was linked to, if any. The old text (description and details) is placed in the Action part, and the other three parts start empty; the user can split it up. Tags and extra data are kept as notes on the answer.
 - **Source entries after a draft is accepted:** the answer stores the ids of the entries it was built from. If a source is edited, nothing happens; if it is deleted, the answer shows "source removed". No stale flag.
-- **Drafting:** free-form, about 150 words, first person, in a story shape (situation, what you did, result) when the Record supports it. The AI picks the Record entries. After drafting, the app checks the answer the same way resume bullets are checked (cited entries exist, every number appears in a cited entry, tools and skills named are in a cited entry) and drops a draft that fails, telling the user why. Approving a custom question just means saving it; the draft button is then available.
+- **Drafting:** the AI fills the four STAR parts, about 150 words in total, in the first person; a part the Record cannot support is left empty rather than invented. The AI picks the Record entries. After drafting, the app checks the answer the same way resume bullets are checked (cited entries exist, every number appears in a cited entry, tools and skills named are in a cited entry) and drops a draft that fails, telling the user why. Approving a custom question just means saving it; the draft button is then available.
 - **Built-in questions:** kept in code with stable ids; the database stores only which ids the user hid. The user can unhide. A later release can add questions without disturbing answers.
 - **Add field menu:** a new entry starts with the default fields only. When editing, any field that has a value shows automatically, and the menu lists the rest.
 - **Controlled values:** degree type, education status and employment type are pick lists with an "Other" free-text choice; skill level is a short pick list (Beginner, Intermediate, Advanced, Expert); "OK to contact" is yes or no; GPA is free text with a separate scale field; dates stay free text.
