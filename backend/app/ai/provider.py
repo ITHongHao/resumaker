@@ -1,4 +1,5 @@
 import base64
+import os
 from typing import Any, Protocol
 
 from app.keystore import KeyStore
@@ -118,6 +119,12 @@ class OpenAILLM:
 
 
 def get_llm(settings: AppSettings, keystore: KeyStore) -> LLM:
+    # For tests and demos only: switched on solely by the process environment (checked on every
+    # call), never by a request parameter, header, or setting.
+    if os.environ.get("RESUMAKER_FAKE_LLM") == "1":
+        from app.ai.fake import FakeLLM
+
+        return FakeLLM()
     key = keystore.get(settings.provider)
     if not key:
         raise NoKeyError(settings.provider)
