@@ -9,9 +9,23 @@ type Msg = { role: 'user' | 'assistant'; text: string; proposals?: CardDraft[]; 
 
 const JOB_KINDS = ['project', 'accomplishment'] as const
 
-export default function AskAIDrawer({ jobId, onAdded }: { jobId: number; onAdded?: (c: Card) => void }) {
+export default function AskAIDrawer({
+  jobId,
+  onAdded,
+  label = '✦ Ask AI',
+  initialMessage = '',
+  describedBy,
+}: {
+  /** Job the conversation is about, or null for something outside any job. */
+  jobId: number | null
+  onAdded?: (c: Card) => void
+  label?: string
+  /** Prefills the message box when the drawer opens. It is not sent until the user presses Send. */
+  initialMessage?: string
+  describedBy?: string
+}) {
   const [open, setOpen] = useState(false)
-  const [text, setText] = useState('')
+  const [text, setText] = useState(initialMessage)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -56,8 +70,8 @@ export default function AskAIDrawer({ jobId, onAdded }: { jobId: number; onAdded
 
   return (
     <>
-      <Button variant="outline" className="rounded-full" onClick={() => setOpen(true)}>
-        ✦ Ask AI
+      <Button variant="outline" className="rounded-full" aria-describedby={describedBy} onClick={() => setOpen(true)}>
+        {label}
       </Button>
       {open && (
         <div className="fixed inset-0 z-40 flex justify-end bg-black/30">

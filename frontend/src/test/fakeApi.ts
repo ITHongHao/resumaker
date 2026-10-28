@@ -2,7 +2,10 @@ import { vi } from 'vitest'
 
 import type { Card, Job } from '@/api'
 
-type Handler = (req: { method: string; path: string; body: any }) => { status?: number; body?: unknown } | undefined
+type Reply = { status?: number; body?: unknown } | undefined
+// A handler may answer later (a Promise) to model slow responses. A Blob body is served as a
+// binary response (res.blob()).
+type Handler = (req: { method: string; path: string; body: any }) => Reply | Promise<Reply>
 
 export interface FakeServer {
   jobs: Job[]
@@ -34,8 +37,10 @@ export function installFakeApi(init: Partial<Pick<FakeServer, 'jobs' | 'cards'>>
       const path = u.pathname
       s.calls.push({ method, path, body, search: u.search })
       const json = (b: unknown, status = 200) =>
-        ({ ok: status < 400, status, json: async () => b }) as Response
-      const o = s.override?.({ method, path, body })
+        (b instanceof Blob
+          ? { ok: status < 400, status, blob: async () => b, json: async () => JSON.parse(await b.text()) }
+          : { ok: status < 400, status, json: async () => b, blob: async () => new Blob([JSON.stringify(b)]) }) as Response
+      const o = await s.override?.({ method, path, body })
       if (o) return json(o.body, o.status ?? 200)
       if (path === '/api/jobs' && method === 'GET') return json(s.jobs)
       if (path === '/api/jobs' && method === 'POST') {

@@ -90,9 +90,61 @@ export interface ApplicationSummary {
   company: string
   score: number
   version: number
-  // Not returned by the list endpoint today; the gallery shows them when present.
   stale?: boolean
   format?: string
+}
+
+export type MatchStatus = 'matched' | 'partial' | 'missing'
+export interface RequirementMatch {
+  term: string
+  status: MatchStatus
+}
+/** A rewrite of one \resumeItem{...} line. `old_tex`/`new_tex` are the escaped forms. */
+export interface Suggestion {
+  bullet_index: number
+  old: string
+  new: string
+  old_tex: string
+  new_tex: string
+  terms: string[]
+  source_card_id: number
+  score_delta: number
+}
+export interface ResumeVersion {
+  id: number
+  version: number
+  tex: string
+  bullets: { section: string; job_id: number | null; text: string; source_card_id: number }[]
+  record_hash: string
+  created_at: string
+}
+export interface ApplicationDetail {
+  id: number
+  posting_id: number
+  status: ApplicationStatus
+  created_at: string
+  posting: { id: number; title: string; company: string }
+  version: ResumeVersion
+  score: number
+  matches: RequirementMatch[]
+  potential: number
+  suggestions: Suggestion[]
+  uncovered: Requirement[]
+  stale: boolean
+}
+export interface ScoreOut {
+  score: number
+  matches: RequirementMatch[]
+  potential: number
+}
+
+/** POST /api/latex/compile answered 422: the compiler's message and log. */
+export class CompileFailure extends Error {
+  log: string
+  constructor(message: string, log: string) {
+    super(message)
+    this.log = log
+  }
 }
 export interface ApplicationCreated {
   id: number
@@ -121,6 +173,32 @@ function describe(body: unknown, fallback: string): string {
       .join('; ')
   }
   return fallback
+}
+
+async function compileLatex(tex: string): Promise<Blob> {
+  let res: Response
+  try {
+    res = await fetch('/api/latex/compile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tex }),
+    })
+  } catch {
+    throw new ApiError(0, 'Could not reach the Resumaker server. Is the backend running?')
+  }
+  if (res.ok) return res.blob()
+  let parsed: unknown = null
+  try {
+    parsed = await res.json()
+  } catch {
+    /* non-JSON error body */
+  }
+  const detail = (parsed as { detail?: unknown } | null)?.detail
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && 'message' in detail) {
+    const d = detail as { message?: unknown; log?: unknown }
+    throw new CompileFailure(String(d.message ?? 'LaTeX compilation failed'), typeof d.log === 'string' ? d.log : '')
+  }
+  throw new ApiError(res.status, describe(parsed, `Compile failed (${res.status})`))
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -191,6 +269,14 @@ export const api = {
   },
   createApplication: (posting_id: number) =>
     request<ApplicationCreated>('POST', '/api/applications', { posting_id }),
+  getApplication: (id: number) => request<ApplicationDetail>('GET', `/api/applications/${id}`),
+  updateApplication: (id: number, status: ApplicationStatus) =>
+    request<{ id: number; status: ApplicationStatus }>('PATCH', `/api/applications/${id}`, { status }),
+  /** Deterministic live score of unsaved tex. Never an AI call. */
+  scoreTex: (id: number, tex: string) => request<ScoreOut>('POST', `/api/applications/${id}/score`, { tex }),
+  saveVersion: (id: number, tex: string) =>
+    request<ResumeVersion>('POST', `/api/applications/${id}/versions`, { tex }),
+  compileLatex,
 
   propose: (job_id: number | null, message: string, history: ChatTurn[]) =>
     request<ProposalReply>('POST', '/api/ai/propose', { job_id, message, history }),
