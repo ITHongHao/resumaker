@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.db import init_db
+from app.hostguard import HostOriginGuard
 from app.routes import ai, applications, latex, portability, postings, profile, record, settings
 
 
@@ -15,6 +16,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Resumaker", lifespan=lifespan)
+# Outermost check: refuses foreign Host / cross-site Origin before any route runs.
+app.add_middleware(HostOriginGuard)
 
 
 @app.exception_handler(RequestValidationError)

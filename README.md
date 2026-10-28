@@ -40,6 +40,12 @@ Everything is stored under `~/.resumaker/`: the SQLite database (`resumaker.db`)
 
 Set them in the same shell that starts the backend, for example `RESUMAKER_HOME=/tmp/rm RESUMAKER_DB=/tmp/rm/r.db make dev`. The Record and Profile can be backed up and restored as JSON from the Profile page.
 
+### Which requests the backend answers
+
+The API has no login, so the backend refuses (HTTP 403) anything a web page on another site could send it: a request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (any port; this blocks DNS rebinding), and any non-GET request whose `Origin` is another site, or that has no `Origin` but is marked `Sec-Fetch-Site: cross-site`. Requests with no `Origin` at all (curl, scripts) are allowed. No CORS headers are sent. If you reach the app under another local host name, add it (host names only, comma-separated; they are added to the loopback names, never replace them):
+
+    RESUMAKER_ALLOWED_HOSTS=resumaker.local make dev
+
 ### Add an API key
 
 Open Settings, choose a provider (Anthropic or OpenAI), optionally set a model name, and paste your key. The key is saved only in `keys.json` on this machine, is never sent back to the browser, and is used only for the requests you trigger.
